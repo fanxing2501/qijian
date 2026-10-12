@@ -1,0 +1,8 @@
+.scala-build/
+.bsp/
+dist/
+artifacts/
+.runtime/
+.tools/
+*.log
+node_modules/

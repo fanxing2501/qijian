@@ -1,0 +1,40 @@
+version: 1
+jobs:
+  - name: test
+    run: sh scripts/scala.sh test shared server
+  - name: server-build
+    run: sh scripts/scala.sh compile shared server/project.scala server/src/main
+  - name: client-build
+    run: |
+      mkdir -p dist/web
+      sh scripts/scala.sh --power package shared client --js --js-module-kind esmodule -o dist/web/app.js --force
+      cp client/public/index.html client/public/style.css dist/web/
+  - name: build
+    needs: [test, server-build, client-build]
+    run: ':'
+  - name: native-build
+    run: sh scripts/native-build.sh
+  - name: wine-runtime
+    run: sh scripts/wine-runtime.sh
+  - name: server-package
+    needs: [build]
+    run: sh scripts/scala.sh --power package shared server/project.scala server/src/main --assembly --preamble=false --main-class htpc.server.Main -o dist/htpc-next.jar --force
+  - name: integration-test
+    needs: [server-package, native-build]
+    run: bun scripts/integration.ts
+  - name: package
+    needs: [integration-test, native-build]
+    run: sh scripts/package.sh
+  - name: upload
+    needs: [package]
+    run: sh scripts/upload.sh
+  - name: deploy
+    needs: [upload]
+    run: sh scripts/deploy.sh
+  - name: status
+    run: |
+      . ./config.env
+      curl --fail --silent --show-error "http://$HTPC_HOST:$HTPC_PORT/api/v1/health"
+  - name: run
+    needs: [client-build]
+    run: sh scripts/run.sh
