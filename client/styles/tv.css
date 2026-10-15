@@ -3,6 +3,7 @@
 @source "../public/index.html";
 
 .game-display-panel { margin-top: 1.5rem; }
+.game-display-panel > .tv-button { width: 100%; justify-content: flex-start; }
 .game-display-options { margin-top: 1rem; padding: 1.25rem; border: 1px solid #ffffff20; border-radius: 1rem; }
 .game-display-options h3 { font-size: 1.35rem; margin-bottom: .5rem; }
 .game-display-options p { margin-bottom: .75rem; }
