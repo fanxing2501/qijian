@@ -68,15 +68,17 @@ final class FocusManager:
   )
 
   private def candidates: Vector[dom.HTMLElement] =
-    val nodes = dom.document.querySelectorAll("[data-tv-focus]")
+    val scope = Option(dom.document.querySelector("[data-tv-scope]"))
+    val nodes = scope.fold(dom.document.querySelectorAll("[data-tv-focus]"))(_.querySelectorAll("[data-tv-focus]"))
     (0 until nodes.length).map(i => nodes(i).asInstanceOf[dom.HTMLElement]).filter(e => e.offsetWidth > 0 && e.getAttribute("disabled") == null).toVector
 
   private def active: Option[dom.HTMLElement] = candidates.find(_ == dom.document.activeElement)
 
   def remember(): Unit = active.foreach(e => saved += route -> e.getAttribute("data-tv-focus"))
   def awaiting(prefix: String): Option[String] = pending.filter(_.startsWith(prefix))
-  def navigate(direction: String): Unit = move(direction)
-  def confirm(): Unit = { pending = None; active.foreach(_.click()) }
+  private def activity(): Unit = { dom.document.dispatchEvent(new dom.Event("tv-activity")); () }
+  def navigate(direction: String): Unit = { activity(); move(direction) }
+  def confirm(): Unit = { activity(); pending = None; active.foreach(_.click()) }
   def cancel(): Unit = { pending = None; back() }
 
   private def select(element: dom.HTMLElement): Unit =
@@ -134,6 +136,12 @@ final class FocusManager:
     val remote = Option(dom.document.activeElement).exists(_.matches("[data-remote-input]"))
     val navigationKey = event.key == "Escape" || (!multiline && Set("ArrowUp", "ArrowDown").contains(event.key))
     if !event.defaultPrevented && !remote && (!editing || navigationKey) then event.key match
+      case "Tab" if dom.document.querySelector("[data-tv-scope]") != null =>
+        event.preventDefault()
+        val items = candidates
+        if items.nonEmpty then
+          val from = active.fold(if event.shiftKey then 0 else -1)(e => items.indexOf(e))
+          select(items((from + (if event.shiftKey then -1 else 1) + items.size) % items.size))
       case "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" => event.preventDefault(); move(event.key)
       case "Escape" | "Backspace" | "BrowserBack" => event.preventDefault(); back()
       case "Enter" | " " if active.nonEmpty => event.preventDefault(); active.foreach(_.click())

@@ -72,7 +72,35 @@ trait App:
 - The **frontend App** implements device authorization, polling intervals/`slow_down`, token renewal and API composition. It executes HTTP requests inside server Chromium through CDP. `serverStorage` injects client configuration/grants into an isolated execution world and captures private results directly; only public data/status returns to the TV browser. Credentials live under `HTPC_DATA/storage/youtube`, survive restarts, and never enter TV localStorage/sessionStorage. Disconnecting an account writes a versioned deletion without revoking other installations sharing a Google project.
 - Signed-in content uses the YouTube Data API: account/channel identity and the latest upload from each subscribed channel, with subscription pagination. Google's public API does not expose the personalized YouTube homepage recommendation algorithm; the UI labels these rows as subscriptions.
 - Public discovery/search, topic shortcuts, video links and continuation loading use frontend-owned extraction in an independent `htpc-youtube-public` headless profile. API requests use a separate `htpc-youtube-account` runtime. The extractor handles classic renderers and current lockup view models; extraction is centralized in `client/src/youtube/YouTubeData.scala`.
-- Playback uses the official YouTube iframe player with pause/play, seeking and a link to the original page. Device OAuth does not log the iframe's browser into youtube.com. Restricted/private video playback may require a separate playback-browser session. Embed restrictions and player errors are shown explicitly.
+- Playback uses the shared full-screen `video-player` with an official YouTube iframe backend. Device OAuth does not log the iframe's browser into youtube.com. Restricted/private video playback may require a separate playback-browser session. Embed restrictions and player errors are shown explicitly.
+
+### Internal video-player
+
+`client/src/player` provides one **full-screen-only** playback page and a typed controller for every video App. It is a reusable capability, not a home-screen application: it has no AppRegistry entry, home tile or feed. The calling App keeps its own typed route and returns `VideoPlayer.page(request)` from its resolver.
+
+```scala
+import htpc.client.player.*
+
+val request = VideoRequest(
+  parts = episodes.map { episode =>
+    VideoPart(episode.id, episode.title, signal =>
+      resolveEpisode(episode.id, signal).map(url => MediaSource(url, MediaFormat.Hls)))
+  },
+  startIndex = 0,
+  startPosition = 0,
+  autoNext = true
+)
+val page = VideoPlayer.page(request)
+```
+
+- `VideoRequest` supplies an explicitly ordered, nonempty part list and optional starting part/time. IDs identify **parts**, so repeated videos in a playlist may have distinct part IDs. `YouTubePlayer.part` and `YouTubePlayer.request(videos, startIndex)` adapt single videos and ordered YouTube lists. A single-video request ends after that video; unrelated recommendations are not treated as parts.
+- `VideoPart.resolve(AbortSignal)` runs only when that part is opened/retried. Apps own authentication, entitlement checks and fresh-source resolution; server-side credentials remain with their existing provider runtimes. Resolved media URLs stay in memory rather than navigation hashes or persistent storage. The abort signal and a generation fence prevent an old resolution or engine callback from replacing a newer part or restarting playback after exit.
+- `VideoSource.create(host, report)` supplies a `VideoBackend`. Construction is inert; `mount()` starts it after the controller takes ownership. Backends implement play/pause/seek/volume/speed/close and report typed `VideoEvent` values, including actual EOF. `Playback.state` exposes the part, phase, position/duration, capabilities, settings and error message. Callers may use the controller independently of the standard page.
+- Built-in backends are browser-native file playback (`MediaSource`, MP4/WebM subject to browser codec support), HLS/DASH through locally packaged **Shaka Player 5.2.13**, and YouTube's official IFrame API. Provider-specific or native playback engines can implement the same backend interface. Network media must be reachable with suitable CORS or a provider-managed same-origin media endpoint; the player does not extract or bypass protected streams.
+- A real EOF advances **once** to the next part when auto-next is enabled. The final part stops without looping. Pausing, buffering, errors and leaving the page do not advance the queue. Errors retain the current part and expose retry, which resolves a fresh source. Previous/next, part selection, auto-next toggle, seek ±10s, speed and volume share one controller interface.
+- Playback occupies the entire viewport (the TV kiosk already owns the physical fullscreen surface). Controls and the horizontal part selector overlay the picture. Controls hide after inactivity and reappear on keyboard/gamepad/pointer input or a non-playing state. Focus is confined to the player; B/back closes the page, disposes the engine and restores the caller's focus. Part switches do not create browser-history entries.
+
+`groot jobs integration-test` includes a separate, **unshipped** Scala.js player fixture. Chromium verifies real file/HLS/DASH decoding, pause/seek, auto-next and final EOF, start position, settings across part changes, controller wake-up, focus containment/restoration, deferred/cancelled resolutions, duplicate/late EOF, fresh-source retry and the YouTube loader/adapter contract. `ffmpeg` creates local media fixtures; tests use isolated, muted Chromium playback and do not drive the physical television. `groot jobs player-test` runs just these checks against an existing capability server (`HTPC_PLAYER_TEST_BASE`, default `http://127.0.0.1:8787`), creating and deleting its own ephemeral browser instance.
 
 #### Configure Google TV credentials once
 

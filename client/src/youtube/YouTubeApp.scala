@@ -4,6 +4,7 @@ import com.raquo.laminar.api.L.*
 import com.raquo.laminar.codecs.StringAsIsCodec
 import htpc.client.ApiClient
 import htpc.client.tv.*
+import htpc.client.player.{VideoPlayer, VideoRequest}
 import htpc.youtube.*
 import io.circe.Codec
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -40,7 +41,7 @@ final class YouTubeApp(api: ApiClient) extends RoutedApp:
     case YouTubeRoute.Home => mainPage
     case YouTubeRoute.Login => Page(ctx => DeviceLogin.render(service, ctx, Destination.AppHome(this)))
     case YouTubeRoute.Search(query) => Page(ctx => search(ctx, query))
-    case YouTubeRoute.Watch(id, title) => Page(ctx => YouTubePlayerPage.render(ctx, id, title))
+    case YouTubeRoute.Watch(id, title) => VideoPlayer.page(VideoRequest(Vector(YouTubePlayer.part(id, title))))
 
   private def account(context: PageContext): HtmlElement = div(cls := "yt-account-status",
     child <-- service.auth.signal.map {

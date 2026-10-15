@@ -9,6 +9,7 @@ import { accountFixture, auditCredentials } from "./account-fixture";
 import { infrastructureTest } from "./infrastructure-test";
 import { hostTest } from "./host-test";
 import { openCdp } from "./cdp-client";
+import { playerTest } from "./player-test";
 
 const root = process.cwd();
 const temporary = resolve(root, ".runtime", `integration-${crypto.randomUUID()}`);
@@ -265,7 +266,7 @@ try {
     await waitFor("remote continuation pagination", async () => (await jsValue(uiTab, "document.querySelector('[data-feed-id=\"youtube:home\"]').querySelectorAll('.tv-card').length")) === 30);
     await jsValue(uiTab, "document.querySelector('[data-tv-focus=\"youtube:home:testvid0025\"]').focus();true");
     await key("Enter");
-    await waitFor("paginated video route", async () => await jsValue(uiTab, "!!document.querySelector('.yt-player-page')"));
+    await waitFor("paginated video route", async () => await jsValue(uiTab, "!!document.querySelector('.video-player-page')"));
     await key("Escape");
     await waitFor("focus restoration across multiple batches", async () => await focus() === "youtube:home:testvid0025");
     await click("youtube:search");
@@ -277,7 +278,7 @@ try {
     await waitFor("search results", async () => (await jsValue(uiTab, "document.querySelectorAll('.tv-card').length")) === 12);
     await jsValue(uiTab, "document.querySelectorAll('.tv-card')[1].focus();true");
     await key("Enter");
-    await waitFor("typed video route", async () => await jsValue(uiTab, "!!document.querySelector('.yt-player-page')"));
+    await waitFor("typed video route", async () => await jsValue(uiTab, "!!document.querySelector('.video-player-page')"));
     await key("Escape");
     await waitFor("async feed focus restoration", async () => await focus() === "youtube:search:nature:testvid0001");
     await click("nav:account");
@@ -384,6 +385,7 @@ try {
     await waitFor('WebSocket detach disposes all credential runtime tabs',async()=>(await rpc('chromium','tab.list',{instance:steamBrowser.id})).length===1);
     assert.deepEqual(google.errors,[]);assert.deepEqual(steam.errors,[]);
     console.log("✓ Steam QR/scan/approval/cancel/denial/expiry, complete owned library sorted by last played, paging, details/focus, home feed, retry/empty/logout");
+    await playerTest(rpc, uiTab);
   } catch (error) {
     console.error("TV diagnostic:", await jsValue(uiTab, "({url:location.href,focus:document.activeElement?.getAttribute('data-tv-focus'),text:document.body.innerText})").catch(String));
     console.error("Fixture errors:", site.errors,google.errors,steam.errors);

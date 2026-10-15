@@ -203,14 +203,24 @@
   .steam-download { @apply my-4 flex flex-col gap-2 text-sm text-muted; }
   .steam-download progress { @apply h-2 w-full overflow-hidden rounded-full; accent-color: var(--color-accent); }
   .steam-install-config { @apply mb-5 flex flex-col gap-3; }
-  .yt-player-page { @apply py-6; padding-inline: var(--tv-gutter); }
-  .yt-player-heading { @apply mb-5 flex items-center gap-6; }
-  .yt-player-heading h1 { @apply line-clamp-2 text-lg font-medium; }
-  .yt-player-host { @apply mx-auto aspect-video overflow-hidden rounded-xl border border-white/10 bg-black; max-height: 65vh; }
-  .yt-player-host iframe { @apply size-full border-0; }
-  .yt-player-status { @apply my-4 text-center text-sm text-accent; }
-  .yt-player-status:empty { @apply hidden; }
-  .yt-player-controls { @apply mt-5 flex flex-wrap justify-center gap-4; }
+  .video-player-page { position: fixed; inset: 0; z-index: 100; background: #000; color: #fff; }
+  .video-player-host, .video-player-host video, .video-player-host iframe { width: 100%; height: 100%; border: 0; object-fit: contain; }
+  .video-player-surface { position: absolute; inset: 0; width: 100%; border: 0; background: transparent; }
+  .video-player-overlay { position: absolute; inset-inline: 0; padding: 1.5rem var(--tv-gutter); transition: opacity 180ms; }
+  .video-player-heading { top: 0; display: flex; align-items: center; gap: 1.5rem; background: linear-gradient(#000c, transparent); }
+  .video-player-heading h1 { @apply line-clamp-2 text-lg font-medium; }
+  .video-player-heading p { font-size: .85rem; color: #bbb; }
+  .video-player-bottom { bottom: 0; background: linear-gradient(transparent, #000e 25%); padding-top: 3rem; }
+  .video-player-status { @apply my-3 text-center text-sm text-accent; }
+  .video-player-status:empty { display: none; }
+  .video-player-progress { display: flex; align-items: center; gap: 1.5rem; font-variant-numeric: tabular-nums; font-size: .85rem; }
+  .video-player-progress progress { flex: 1; height: .3rem; accent-color: #d4f48c; }
+  .video-player-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: .65rem; margin-top: 1.2rem; }
+  .video-player-controls .tv-button { padding: .65rem .9rem; font-size: .85rem; min-height: 2.75rem; }
+  .video-player-parts { display: flex; gap: .75rem; overflow-x: auto; margin-top: 1rem; padding: .5rem; }
+  .video-player-parts .tv-button { flex-shrink: 0; max-width: 30rem; }
+  .video-player-hint { margin-top: .8rem; text-align: center; color: #aaa; font-size: .75rem; }
+  .video-player-page[data-controls="false"] .video-player-overlay { opacity: 0; pointer-events: none; }
   .yt-playback-note { @apply mt-5 text-center text-xs; }
 }
 
@@ -260,7 +270,7 @@
   .steam-detail-body { flex-direction: column; align-items: flex-start; gap: 2rem; }
   .steam-detail-body > img { width: 12rem; }
   .steam-detail-body h1 { font-size: 2rem; }
-  .yt-player-heading { flex-wrap: wrap; }
+  .video-player-heading { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) {
   .tv-shell *, .tv-shell *::before, .tv-shell *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
