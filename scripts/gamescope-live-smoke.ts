@@ -6,6 +6,8 @@ import { openCdp } from './cdp-client';
 
 const base = process.env.HTPC_TEST_URL || 'http://127.0.0.1:8787';
 const appId = Number(process.env.HTPC_TEST_APP || '814380');
+const fps = Number(process.env.HTPC_TEST_FPS || '30');
+assert([30, 60].includes(fps), 'Acceptance frame cap must be 30 or 60');
 async function rpc(module: string, op: string, args = {}) {
   const r = await (await fetch(`${base}/api/v1/${module}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: crypto.randomUUID(), op, args }) })).json();
@@ -23,7 +25,7 @@ assert(!initial.windows.some((w: any) => w.workspace === 'game'), 'Run acceptanc
 const shell = initial.windows.find((w: any) => w.appId === 'htpc-next'); assert(shell);
 const env = Object.fromEntries((await Bun.file(`${process.env.HOME}/.config/htpc-next/desktop.env`).text()).trim().split('\n').map(s => s.split('=', 2)));
 const capture = process.env.HTPC_CAPTURE_TOOL || Bun.which('grim');
-const profile = { enabled: true, width: 1600, height: 900, fps: 30, scaling: 'Fsr', sharpness: 5, hud: true };
+const profile = { enabled: true, width: 1600, height: 900, fps, scaling: 'Fsr', sharpness: 5, hud: true };
 const plan = await rpc('system', 'game-display.prepare', { application: 'acceptance-local', settings: profile });
 assert(Bun.which('ffplay'), 'Install ffplay for the non-Steam animated acceptance demo');
 await Bun.write('artifacts/gamescope-local.log', '');
@@ -40,7 +42,7 @@ try {
   const args = (await Bun.file(`/proc/${window.pid}/cmdline`).text()).split('\0');
   assert(args.includes('fsr') && args.includes('--mangoapp') && args.includes('1600'));
   if (capture) assert.equal(await Bun.spawn([capture, 'artifacts/gamescope-local.png'], { env: { ...process.env, ...env } }).exited, 0);
-  console.log('✓ non-Steam animated application: labelled Gamescope window, FSR, 900p → TV output, 30 FPS, MangoApp');
+  console.log(`✓ non-Steam animated application: labelled Gamescope window, FSR, 900p → TV output, ${fps} FPS profile, MangoApp`);
 } finally {
   try { process.kill(-local.pid, 'SIGTERM'); } catch {}
   await local.exited; closeSync(fd);
@@ -80,7 +82,7 @@ try {
   if ((await ui.evaluate(`document.activeElement?.getAttribute('data-tv-focus')`)).endsWith(':reload')) await pad(14);
   assert.equal(await ui.evaluate(`document.activeElement?.getAttribute('data-tv-focus')`), `display:steam-${appId}:save`);
   await setOption('enabled', '开启'); await setOption('resolution', '1600 × 900');
-  await setOption('fps', '30 FPS'); await setOption('scaling', 'FSR 1'); await setOption('hud', '开启');
+  await setOption('fps', `${fps} FPS`); await setOption('scaling', 'FSR 1'); await setOption('hud', '开启');
   await ui.evaluate(`document.querySelector('[data-tv-focus="display:steam-${appId}:save"]').focus();true`);
   await pad(0);
   await until(() => ui.evaluate(`document.querySelector('.game-display-options .steam-message')?.textContent.includes('已保存')`));

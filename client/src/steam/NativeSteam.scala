@@ -51,6 +51,7 @@ final class NativeSteam(api: ApiClient):
   private var launchTime = 0.0
   private var loginVisible = false
   private var refreshQrPending = false
+  private var restoreFocusAfterPoll = false
 
   def openLogin(): Unit = { loginVisible = true; refreshQr() }
   def closeLogin(): Unit = { loginVisible = false; qrImage.set(None) }
@@ -86,7 +87,7 @@ final class NativeSteam(api: ApiClient):
             previousWindow.filter(ref => display.windows.exists(_.ref == ref)).fold(Future.successful(()))(ref =>
               Rpc(api, SwayOp.SetFullscreen(ref, true)).flatMap(_ => Rpc(api, SwayOp.Focus(ref))).map(_ => ()))
           }.flatMap { _ =>
-            context.foreach(ctx => ctx.focus.restore(ctx.navigation.key(ctx.navigation.current.now())))
+            restoreFocusAfterPoll = true
             clearLaunch(id)
           }
         case None if !seenRunning && value.games.find(_.appId == id).forall(_.task.isEmpty) && scala.scalajs.js.Date.now() - launchTime > 120000 =>
@@ -124,7 +125,13 @@ final class NativeSteam(api: ApiClient):
       polling = false
       if mounted then
         result match
-          case Success((value, qr)) => state.set(Some(value)); qrImage.set(if loginVisible then qr.image else None); qrState.set(qr.state); problem.set(None)
+          case Success((value, qr)) =>
+            state.set(Some(value)); qrImage.set(if loginVisible then qr.image else None); qrState.set(qr.state); problem.set(None)
+            // Play becomes visible when the new native state is rendered. Restore after that,
+            // rather than while the prior poll still describes a running game.
+            if restoreFocusAfterPoll then
+              restoreFocusAfterPoll = false
+              context.foreach(ctx => ctx.focus.restore(ctx.navigation.key(ctx.navigation.current.now())))
           case Failure(_) => target = None; state.set(None); qrImage.set(None); problem.set(Some("本机 Steam 尚未就绪，可启动客户端后重试。"))
         timer = dom.window.setTimeout(() => poll(), if result.isSuccess then 2000 else 5000)
     }

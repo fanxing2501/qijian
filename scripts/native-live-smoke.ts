@@ -35,8 +35,9 @@ try {
   const route = '/app/steam/' + encodeURIComponent(JSON.stringify({ Game: { appId } }));
   if (resume) assert(kiosk.url.includes(route), 'Resume only this test\'s existing game page');
   else {
-    await ui.call('Page.navigate', { url: base + '/?display=1#' + route });
-    await waitFor('installed game ready, including Steam updates', () => ui.evaluate(`(()=>{const b=document.querySelector('[data-tv-focus="steam:local-play"]');return !!b?.offsetWidth&&!b.disabled})()`), 600000);
+    const token = crypto.randomUUID();
+    await ui.call('Page.navigate', { url: base + '/?display=1&smoke=' + token + '#' + route });
+    await waitFor('installed game ready in the new document, including Steam updates', () => ui.evaluate(`(()=>{if(!location.search.includes('${token}'))return false;const b=document.querySelector('[data-tv-focus="steam:local-play"]');return !!b?.offsetWidth&&!b.disabled})()`), 600000);
     assert(await click('play')); launched = true;
   }
   const running = await waitFor('fullscreen game on game workspace (first-run shader compilation may take several minutes)', async () => {
