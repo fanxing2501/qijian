@@ -16,14 +16,17 @@ import org.typelevel.ci.CIString
 import java.nio.file.Files
 import scala.concurrent.duration.*
 
-final class ServiceInterpreter(browser: Chromium, dll: Wine, display: Sway, events: EventHub) extends Interpreter[IO]:
+final class ServiceInterpreter(browser: Chromium, dll: Wine, display: Sway, events: EventHub, serverStorage: ServerStorage, local: HostServices) extends Interpreter[IO]:
   def chromium[A](op: ChromiumOp[A]) = browser.handle(op)
   def wine[A](op: WineOp[A]) = dll.handle(op)
   def sway[A](op: SwayOp[A]) = display.handle(op)
+  def storage[A](op: StorageOp[A]) = serverStorage.handle(op, browser)
+  def host[A](op: HostOp[A]) = local.handle(op)
   def system[A](op: SystemOp[A]): IO[Either[SystemError, A]] = op match
     case SystemOp.GetCapabilities => IO.pure(Right(Capabilities(browser.capability, dll.capability, display.capability, events.epoch)))
+    case SystemOp.QrCode(text) => QrCode.render(text)
 
-final class Routes(config: Config, interpreter: Interpreter[IO], events: EventHub):
+final class Routes(config: Config, interpreter: Interpreter[IO], events: EventHub, browser: Chromium, dispatcher: Dispatcher[IO], local: HostServices):
   private def execute(id: String, packed: PackedRequest): IO[RpcResponse] =
     packed.request.accept(interpreter).map {
       case Right(value) => RpcResponse(id, "result", packed.request.resultCodec(value))
@@ -43,9 +46,23 @@ final class Routes(config: Config, interpreter: Interpreter[IO], events: EventHu
     }
 
   private val noStore = Header.Raw(CIString("Cache-Control"), "no-store")
-  private val modules = Map("system" -> Module.System, "chromium" -> Module.Chromium, "wine" -> Module.Wine, "sway" -> Module.Sway)
+  private val modules = Map("system" -> Module.System, "chromium" -> Module.Chromium, "wine" -> Module.Wine, "sway" -> Module.Sway, "storage" -> Module.Storage, "host" -> Module.Host)
 
-  val routes: HttpRoutes[IO] = HttpRoutes.of[IO] {
+  def routes(ws: org.http4s.server.websocket.WebSocketBuilder2[IO]): HttpRoutes[IO] = HttpRoutes.of[IO] {
+    case request @ GET -> Root / "api" / "v1" / "host" / service / "targets" / target / "cdp" =>
+      local.socketEndpoint(service, target).attempt.flatMap {
+        case Right(url) =>
+          if request.headers.get(CIString("Upgrade")).exists(_.head.value.equalsIgnoreCase("websocket")) then BrowserSocket.open(url, ws, dispatcher)
+          else BadRequest("Expected a WebSocket upgrade")
+        case Left(_) => NotFound()
+      }
+    case request @ GET -> Root / "api" / "v1" / "chromium" / id / "cdp" =>
+      browser.socketEndpoint(Id(id)).attempt.flatMap {
+        case Right(url) =>
+          if request.headers.get(CIString("Upgrade")).exists(_.head.value.equalsIgnoreCase("websocket")) then BrowserSocket.open(url, ws, dispatcher)
+          else BadRequest("Expected a WebSocket upgrade")
+        case Left(_) => NotFound()
+      }
     case GET -> Root / "api" / "v1" / "health" => Ok(Json.obj("status" -> "ok".asJson, "epoch" -> events.epoch.asJson))
     case request @ POST -> Root / "api" / "v1" / module if modules.contains(module) =>
       rpc(request, modules(module)).map(_.putHeaders(noStore))
@@ -57,8 +74,9 @@ final class Routes(config: Config, interpreter: Interpreter[IO], events: EventHu
       }
       Ok(stream.through(fs2.text.utf8.encode)).map(_.putHeaders(noStore,
         Header.Raw(CIString("Content-Type"), "text/event-stream"), Header.Raw(CIString("X-Accel-Buffering"), "no")))
-    case request @ GET -> Root => StaticFile.fromPath(fs2.io.file.Path.fromNioPath(config.web.resolve("index.html")), Some(request)).getOrElseF(NotFound())
-    case request @ GET -> Root / asset if Set("app.js", "app.js.map", "style.css").contains(asset) =>
+    case GET -> Root => StaticFile.fromPath[IO](fs2.io.file.Path.fromNioPath(config.web.resolve("index.html")), None).getOrElseF(NotFound()).map(_.putHeaders(noStore))
+    case GET -> Root / "console" => StaticFile.fromPath[IO](fs2.io.file.Path.fromNioPath(config.web.resolve("console.html")), None).getOrElseF(NotFound()).map(_.putHeaders(noStore))
+    case request @ GET -> Root / asset if asset.matches("[A-Za-z0-9_-][A-Za-z0-9_.-]*\\.(js|map|css|svg|png|jpg|jpeg|webp|avif)") =>
       StaticFile.fromPath(fs2.io.file.Path.fromNioPath(config.web.resolve(asset)), Some(request)).getOrElseF(NotFound())
   }
 
@@ -70,14 +88,16 @@ object Main extends IOApp.Simple:
     browser <- Chromium.resource(config, events, dispatcher)
     wine <- Wine.resource(config, events)
     sway = new Sway(config, events)
+    storage <- Resource.eval(ServerStorage.create(config.data.resolve("storage")))
     _ <- Resource.make(sway.watch.start)(_.cancel)
-    interpreter = new ServiceInterpreter(browser, wine, sway, events)
-    routes = new Routes(config, interpreter, events)
+    local = new HostServices(config.hostServices)
+    interpreter = new ServiceInterpreter(browser, wine, sway, events, storage, local)
+    routes = new Routes(config, interpreter, events, browser, dispatcher, local)
     server <- EmberServerBuilder.default[IO]
       .withHost(Host.fromString(config.host).getOrElse(throw IllegalArgumentException("Invalid HTPC_HOST")))
       .withPort(Port.fromInt(config.port).getOrElse(throw IllegalArgumentException("Invalid HTPC_PORT")))
       .withIdleTimeout(180.seconds)
-      .withHttpApp(org.http4s.server.middleware.EntityLimiter.httpApp[IO](routes.routes.orNotFound, 4L * 1024 * 1024))
+      .withHttpWebSocketApp(ws => org.http4s.server.middleware.EntityLimiter.httpApp[IO](routes.routes(ws).orNotFound, 4L * 1024 * 1024))
       .build
   yield server
 

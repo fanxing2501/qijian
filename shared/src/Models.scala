@@ -24,7 +24,7 @@ private def enumCodec[A](values: Array[A]): Codec[A] = Codec.from(
 )
 
 enum Module:
-  case System, Chromium, Wine, Sway
+  case System, Chromium, Wine, Sway, Storage, Host
 object Module:
   given Codec[Module] = enumCodec(values)
 
@@ -42,6 +42,25 @@ final case class ChromiumError(code: ErrorCode, message: String) extends DomainE
 final case class WineError(code: ErrorCode, message: String) extends DomainError derives Codec.AsObject
 final case class SwayError(code: ErrorCode, message: String) extends DomainError derives Codec.AsObject
 final case class SystemError(code: ErrorCode, message: String) extends DomainError derives Codec.AsObject
+final case class StorageError(code: ErrorCode, message: String) extends DomainError derives Codec.AsObject
+final case class HostError(code: ErrorCode, message: String) extends DomainError derives Codec.AsObject
+/** Named local services are configured on the host; requests never supply shell commands. */
+final case class HostService(name: String, available: Boolean, state: String, detail: String, pid: Long) derives Codec.AsObject
+final case class HostTarget(id: String, title: String, url: String, kind: String) derives Codec.AsObject
+final case class StorageKey(namespace: String, key: String) derives Codec.AsObject
+final case class StorageStamp(revision: String, present: Boolean) derives Codec.AsObject
+final case class StorageEntry(value: Option[Json], revision: String):
+  def stamp: StorageStamp = StorageStamp(revision, value.nonEmpty)
+object StorageEntry:
+  given Codec[StorageEntry] = Codec.from(Decoder.instance(c => for
+    present <- c.get[Boolean]("present")
+    revision <- c.get[String]("revision")
+    value <- if present then c.get[Json]("value").map(Some(_)) else Right(None)
+  yield StorageEntry(value, revision)), Encoder.instance(e => Json.obj(
+    "present" -> Json.fromBoolean(e.value.nonEmpty), "value" -> e.value.getOrElse(Json.Null), "revision" -> Json.fromString(e.revision))))
+/** A named isolated world in a server-side Chromium page. */
+final case class BrowserWorld(tab: TabRef, name: String) derives Codec.AsObject
+final case class ChromiumSocket(path: String) derives Codec.AsObject
 final case class ProtocolError(message: String) derives Codec.AsObject
 
 enum CallError[+E]:
@@ -83,6 +102,12 @@ enum JsValue derives Codec.AsObject:
   case Value(value: Json)
   case Undefined
 final case class Screenshot(mimeType: String, base64: String) derives Codec.AsObject
+final case class PageFrame(url: String, title: String, width: Int, height: Int, image: Screenshot) derives Codec.AsObject
+final case class PointerPosition(x: Double, y: Double) derives Codec.AsObject
+enum BrowserKey:
+  case Enter, Tab, Backspace, Delete, Escape, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Home, End, SelectAll
+object BrowserKey:
+  given Codec[BrowserKey] = enumCodec(values)
 
 /** Fields follow CDP's cookie model; optional partitionKey preserves CHIPS identity. */
 final case class Cookie(
@@ -111,7 +136,7 @@ final case class DllInvocation(
 final case class ExecuteOptions(timeoutMs: Int = 15000) derives Codec.AsObject
 
 final case class WindowRef(session: String, container: Long) derives Codec.AsObject
-final case class WindowInfo(ref: WindowRef, title: String, appId: Option[String], workspace: String, focused: Boolean, fullscreen: Boolean) derives Codec.AsObject
+final case class WindowInfo(ref: WindowRef, title: String, appId: Option[String], workspace: String, focused: Boolean, fullscreen: Boolean, pid: Option[Long] = None) derives Codec.AsObject
 final case class OutputMode(width: Int, height: Int, refreshMilliHz: Int) derives Codec.AsObject
 final case class OutputInfo(name: String, active: Boolean, power: Boolean, currentMode: Option[OutputMode], modes: Vector[OutputMode]) derives Codec.AsObject
 final case class WorkspaceInfo(name: String, focused: Boolean, output: String) derives Codec.AsObject

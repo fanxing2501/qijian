@@ -7,6 +7,7 @@ trap 'rm -rf "$stage"' EXIT HUP INT TERM
 cp dist/htpc-next.jar "$stage/"
 cp -R dist/web dist/native "$stage/"
 cp README.md "$stage/"
+cp scripts/migrate-storage.ts "$stage/"
 tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - -C "$stage" . | gzip -n > artifacts/package.tar.gz
 hash=$(sha256sum artifacts/package.tar.gz | cut -d ' ' -f 1)
 name="$PROJECT_NAME-$hash.tar.gz"

@@ -1,0 +1,11 @@
+{
+  "name": "htpc-next-ui",
+  "private": true,
+  "scripts": {
+    "css:build": "tailwindcss -i client/styles/tv.css -o dist/web/tv.css --minify"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "tailwindcss": "4.3.3"
+  }
+}

@@ -11,7 +11,7 @@ import java.nio.file.{Files, Path}
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 
-private final case class BrowserEntry(info: ChromiumInstance, process: Process, cdp: Cdp, lock: Semaphore[IO], release: IO[Unit])
+private final case class BrowserEntry(info: ChromiumInstance, process: Process, cdp: Cdp, endpoint: String, lock: Semaphore[IO], release: IO[Unit])
 
 final class Chromium private(config: Config, events: EventHub, dispatcher: Dispatcher[IO], entries: Ref[IO, Map[ChromiumId, BrowserEntry]], lifecycle: Semaphore[IO]):
   def capability: Capability = config.chromium.fold(Capability(false, "Configure HTPC_CHROMIUM with a Chromium executable"))(p => Capability(true, p))
@@ -83,10 +83,10 @@ final class Chromium private(config: Config, events: EventHub, dispatcher: Dispa
         IO.blocking(process.waitFor(8, java.util.concurrent.TimeUnit.SECONDS)).void)
       _ <- Resource.eval(cdp.call("Target.setDiscoverTargets", Json.obj("discover" -> true.asJson)))
       lock <- Resource.eval(Semaphore[IO](1))
-    yield (process, cdp, lock)).allocated)
-    ((process, cdp, lock), release) = allocated
+    yield (process, cdp, url, lock)).allocated)
+    ((process, cdp, url, lock), release) = allocated
     info = ChromiumInstance(id, options.name, options.profile, InstanceState.Running)
-    _ <- entries.update(_ + (id -> BrowserEntry(info, process, cdp, lock, release)))
+    _ <- entries.update(_ + (id -> BrowserEntry(info, process, cdp, url, lock, release)))
     _ <- events.publish(Topic.Chromium, BrowserEvent(BrowserEventKind.InstanceCreated, id))
   yield info }}
 
@@ -112,6 +112,31 @@ final class Chromium private(config: Config, events: EventHub, dispatcher: Dispa
 
   private def onTab[A](tab: TabRef)(f: (BrowserEntry, String) => IO[A]): IO[A] =
     withEntry(tab.instance)(e => session(e, tab).use(s => f(e, s)))
+
+  def socketEndpoint(id: ChromiumId): IO[String] = withEntry(id)(e => IO.pure(e.endpoint))
+  def command(id: ChromiumId, method: String, params: Json): IO[Json] = withEntry(id)(_.cdp.call(method, params))
+
+  private def inWorld[A](world: BrowserWorld)(f: (Cdp, String, Int) => IO[A]): IO[A] =
+    Fault.require(world.name.matches("[A-Za-z0-9_-]{1,100}"), "Invalid isolated world name") *> onTab(world.tab) { (e, s) => for
+      tree <- e.cdp.call("Page.getFrameTree", session = Some(s))
+      frame <- IO.fromEither(tree.hcursor.downField("frameTree").downField("frame").get[String]("id"))
+      context <- e.cdp.call("Page.createIsolatedWorld", Json.obj("frameId" -> frame.asJson, "worldName" -> world.name.asJson), Some(s))
+      id <- IO.fromEither(context.hcursor.get[Int]("executionContextId"))
+      result <- f(e.cdp, s, id)
+    yield result }
+
+  def inject(world: BrowserWorld, binding: String, value: Json): IO[Unit] =
+    Fault.require(binding.matches("[A-Za-z_][A-Za-z0-9_]{0,100}"), "Invalid browser binding") *> inWorld(world) { (cdp, session, context) =>
+      cdp.call("Runtime.evaluate", Json.obj("expression" -> s"globalThis[${binding.asJson.noSpaces}]=${value.noSpaces};void 0".asJson,
+        "contextId" -> context.asJson), Some(session)).flatMap(j => IO.raiseWhen(j.hcursor.downField("exceptionDetails").succeeded)(Fault(ErrorCode.Execution, "Browser storage injection failed")))
+    }
+
+  def capture(world: BrowserWorld, expression: String): IO[Json] =
+    Fault.require(expression.length <= 1024 * 1024, "Storage expression exceeds 1 MiB") *> inWorld(world) { (cdp, session, context) => for
+      json <- cdp.call("Runtime.evaluate", Json.obj("expression" -> expression.asJson, "contextId" -> context.asJson, "returnByValue" -> true.asJson), Some(session))
+      _ <- IO.raiseWhen(json.hcursor.downField("exceptionDetails").succeeded)(Fault(ErrorCode.Execution, "Browser storage capture failed"))
+      value <- json.hcursor.downField("result").downField("value").focus.liftTo[IO](Fault(ErrorCode.Serialization, "Browser value is not JSON"))
+    yield value }
 
   private def pageInfo(e: BrowserEntry, s: String): IO[NavigationResult] =
     e.cdp.call("Runtime.evaluate", Json.obj("expression" -> "({url: location.href, title: document.title})".asJson,
@@ -187,6 +212,7 @@ final class Chromium private(config: Config, events: EventHub, dispatcher: Dispa
     case ChromiumOp.ListInstance => entries.get.map(_.values.toVector.map(state).sortBy(_.id.value))
     case ChromiumOp.NewInstance(options) => create(options)
     case ChromiumOp.GetInstance(id) => entry(id).map(state)
+    case ChromiumOp.GetSocket(id) => withEntry(id)(_ => IO.pure(ChromiumSocket(s"/api/v1/chromium/${id.value}/cdp")))
     case ChromiumOp.DeleteInstance(id) => delete(id)
     case ChromiumOp.ListTab(id) => withEntry(id)(tabs)
     case ChromiumOp.NewTab(id) => withEntry(id) { e => for
@@ -211,6 +237,54 @@ final class Chromium private(config: Config, events: EventHub, dispatcher: Dispa
       e.cdp.call("Page.captureScreenshot", Json.obj("format" -> "png".asJson), Some(s))
         .flatMap(j => IO.fromEither(j.hcursor.get[String]("data"))).map(Screenshot("image/png", _))
     }
+    case ChromiumOp.CapturePage(tab) => onTab(tab) { (e, s) => for
+      _ <- e.cdp.call("Page.bringToFront", session = Some(s))
+      info <- e.cdp.call("Runtime.evaluate", Json.obj("expression" -> "({url:location.href,title:document.title,width:innerWidth,height:innerHeight})".asJson,
+        "returnByValue" -> true.asJson), Some(s))
+      value = info.hcursor.downField("result").downField("value")
+      url <- IO.fromEither(value.get[String]("url"))
+      title <- IO.fromEither(value.get[String]("title"))
+      width <- IO.fromEither(value.get[Int]("width"))
+      height <- IO.fromEither(value.get[Int]("height"))
+      shot <- e.cdp.call("Page.captureScreenshot", Json.obj("format" -> "jpeg".asJson, "quality" -> 78.asJson), Some(s))
+      image <- IO.fromEither(shot.hcursor.get[String]("data"))
+    yield PageFrame(url, title, width, height, Screenshot("image/jpeg", image)) }
+    case ChromiumOp.ActivateTab(tab) => onTab(tab)((e, s) => e.cdp.call("Page.bringToFront", session = Some(s)).as(Done()))
+    case ChromiumOp.Click(tab, position) => onTab(tab) { (e, s) =>
+      Fault.require(position.x.isFinite && position.y.isFinite && position.x >= 0 && position.y >= 0 && position.x <= 7680 && position.y <= 4320, "Invalid pointer position") *>
+        Vector("mousePressed", "mouseReleased").traverse_(kind => e.cdp.call("Input.dispatchMouseEvent", Json.obj(
+          "type" -> kind.asJson, "x" -> position.x.asJson, "y" -> position.y.asJson,
+          "button" -> "left".asJson, "clickCount" -> 1.asJson), Some(s))).as(Done())
+    }
+    case ChromiumOp.InsertText(tab, text) => onTab(tab) { (e, s) =>
+      Fault.require(text.length <= 4096, "Input text exceeds 4096 characters") *>
+        e.cdp.call("Input.insertText", Json.obj("text" -> text.asJson), Some(s)).as(Done())
+    }
+    case ChromiumOp.PressKey(tab, key) => onTab(tab) { (e, s) =>
+      val (name, code, number, modifiers) = key match
+        case BrowserKey.SelectAll => ("a", "KeyA", 65, 2)
+        case BrowserKey.Enter => ("Enter", "Enter", 13, 0)
+        case BrowserKey.Tab => ("Tab", "Tab", 9, 0)
+        case BrowserKey.Backspace => ("Backspace", "Backspace", 8, 0)
+        case BrowserKey.Delete => ("Delete", "Delete", 46, 0)
+        case BrowserKey.Escape => ("Escape", "Escape", 27, 0)
+        case BrowserKey.Home => ("Home", "Home", 36, 0)
+        case BrowserKey.End => ("End", "End", 35, 0)
+        case BrowserKey.ArrowLeft => ("ArrowLeft", "ArrowLeft", 37, 0)
+        case BrowserKey.ArrowUp => ("ArrowUp", "ArrowUp", 38, 0)
+        case BrowserKey.ArrowRight => ("ArrowRight", "ArrowRight", 39, 0)
+        case BrowserKey.ArrowDown => ("ArrowDown", "ArrowDown", 40, 0)
+      Vector(if key == BrowserKey.Enter then "keyDown" else "rawKeyDown", "keyUp").traverse_(kind => e.cdp.call("Input.dispatchKeyEvent", Json.obj(
+        "type" -> kind.asJson, "key" -> name.asJson, "code" -> code.asJson,
+        "windowsVirtualKeyCode" -> number.asJson, "modifiers" -> modifiers.asJson,
+        "text" -> (if kind == "keyDown" then "\r" else "").asJson,
+        "unmodifiedText" -> (if kind == "keyDown" then "\r" else "").asJson), Some(s))).as(Done())
+    }
+    case ChromiumOp.Scroll(tab, deltaY) => onTab(tab) { (e, s) =>
+      Fault.require(deltaY.isFinite && math.abs(deltaY) <= 10000, "Invalid scroll delta") *>
+        e.cdp.call("Input.dispatchMouseEvent", Json.obj("type" -> "mouseWheel".asJson, "x" -> 100.asJson,
+          "y" -> 100.asJson, "deltaX" -> 0.asJson, "deltaY" -> deltaY.asJson), Some(s)).as(Done())
+    }
     case ChromiumOp.GetCookies(id) => withEntry(id) { e =>
       e.cdp.call("Storage.getCookies").flatMap(j => IO.fromEither(j.hcursor.get[Vector[Cookie]]("cookies")))
         .map(_.map(c => c.copy(expires = c.expires.filter(_ >= 0))))
@@ -218,6 +292,7 @@ final class Chromium private(config: Config, events: EventHub, dispatcher: Dispa
     case ChromiumOp.SetCookies(id, cookies) => withEntry(id) { e =>
       e.cdp.call("Storage.setCookies", Json.obj("cookies" -> Json.arr(cookies.map(_.asJson.deepDropNullValues)*))).as(Done())
     }
+    case ChromiumOp.ClearCookies(id) => withEntry(id)(_.cdp.call("Storage.clearCookies").as(Done()))
     case ChromiumOp.DeleteCookies(id, selector) => withEntry(id) { e =>
       Resource.make(e.cdp.call("Target.createTarget", Json.obj("url" -> "about:blank".asJson))
         .flatMap(j => IO.fromEither(j.hcursor.get[String]("targetId"))))(target =>

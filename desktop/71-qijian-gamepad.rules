@@ -1,0 +1,6 @@
+# The unattended seatd/user-service session has no active logind seat, so
+# TAG+="uaccess" alone does not grant Steam/Proton access. The TV user is in plugdev.
+SUBSYSTEM=="input", KERNEL=="event*|js*", ENV{ID_INPUT_JOYSTICK}=="1", GROUP="plugdev", MODE="0660"
+
+# Steam Input creates its virtual gamepad through uinput.
+SUBSYSTEM=="misc", KERNEL=="uinput", GROUP="plugdev", MODE="0660", OPTIONS+="static_node=uinput"

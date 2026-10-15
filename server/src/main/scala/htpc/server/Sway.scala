@@ -153,7 +153,7 @@ object Sway:
       val own = if !isWindow then Vector.empty else c.get[Long]("id").toOption.toVector.map { id =>
         WindowInfo(WindowRef(session, id), c.get[String]("name").getOrElse(""),
           c.get[Option[String]]("app_id").toOption.flatten.orElse(c.downField("window_properties").get[String]("class").toOption),
-          ws, c.get[Boolean]("focused").getOrElse(false), c.get[Int]("fullscreen_mode").getOrElse(0) != 0)
+          ws, c.get[Boolean]("focused").getOrElse(false), c.get[Int]("fullscreen_mode").getOrElse(0) != 0, c.get[Long]("pid").toOption)
       }
       own ++ children.flatMap(walk(_, ws))
     walk(tree, "")

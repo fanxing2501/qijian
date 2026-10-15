@@ -65,3 +65,10 @@ final class ApiClient(using ExecutionContext):
     source.foreach(_.close())
     source = None
     connected.set(false)
+
+  /** A small typed cleanup request can outlive the page that owns the tab. */
+  def releaseOnUnload[E, A](request: Request[E, A]): Unit =
+    nextId += 1
+    val body = new dom.Blob(js.Array(request.wire(s"$clientId-$nextId").asJson.noSpaces),
+      new dom.BlobPropertyBag { `type` = "application/json" })
+    dom.window.navigator.sendBeacon(s"/api/v1/${request.module.toString.toLowerCase}", body)

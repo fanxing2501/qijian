@@ -1,6 +1,7 @@
 package htpc.server
 
 import cats.effect.{IO, Resource}
+import cats.effect.std.Semaphore
 import cats.syntax.all.*
 import htpc.protocol.ErrorCode
 import io.circe.Json
@@ -14,7 +15,7 @@ import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 
 /** CDP multiplexing over a single browser socket, with flattened target sessions. */
-final class Cdp private(onEvent: Json => Unit) extends WebSocket.Listener:
+final class Cdp private(onEvent: Json => Unit, sending: Semaphore[IO]) extends WebSocket.Listener:
   private val ids = new AtomicLong(0)
   private val closed = new AtomicBoolean(false)
   private val pending = new ConcurrentHashMap[Long, CompletableFuture[Json]]()
@@ -66,7 +67,7 @@ final class Cdp private(onEvent: Json => Unit) extends WebSocket.Listener:
       val request = Json.obj("id" -> id.asJson, "method" -> method.asJson, "params" -> params)
         .deepMerge(session.fold(Json.obj())(s => Json.obj("sessionId" -> s.asJson)))
       val action = IO(pending.put(id, reply)) *>
-        IO.fromCompletableFuture(IO(socket.sendText(request.noSpaces, true))) *>
+        sending.permit.use(_ => IO.fromCompletableFuture(IO(socket.sendText(request.noSpaces, true)))) *>
         IO.fromCompletableFuture(IO(reply))
       action.timeoutTo(timeout, IO.raiseError(Fault(ErrorCode.Timeout, s"CDP $method timed out")))
         .guarantee(IO(pending.remove(id)).void)
@@ -79,4 +80,4 @@ final class Cdp private(onEvent: Json => Unit) extends WebSocket.Listener:
 
 object Cdp:
   def resource(url: String, onEvent: Json => Unit): Resource[IO, Cdp] =
-    Resource.make(IO(new Cdp(onEvent)).flatTap(_.connect(url)))(_.close)
+    Resource.make(Semaphore[IO](1).map(new Cdp(onEvent, _)).flatTap(_.connect(url)))(_.close)

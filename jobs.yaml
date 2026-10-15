@@ -1,17 +1,46 @@
 version: 1
 jobs:
+  - name: desktop-package
+    run: sh scripts/desktop-package.sh
+  - name: desktop-upload
+    needs: [desktop-package]
+    run: |
+      . ./config.env
+      . "./$DESKTOP_RELEASE_MANIFEST"
+      for file in "$ARTIFACT_FILE" "$ARTIFACT_FILE.sha256"; do
+        curl --fail --silent --show-error --retry 3 --upload-file "artifacts/$file" "$S3_UPLOAD_BASE/$file"
+      done
+  - name: desktop-deploy
+    needs: [desktop-upload, steam-bootstrap]
+    run: sh scripts/desktop-deploy.sh
+  - name: desktop-input-prepare
+    needs: [desktop-upload]
+    run: sh scripts/desktop-input-prepare.sh
+  - name: steam-bootstrap
+    run: sh scripts/steam-bootstrap.sh
+  - name: desktop-smoke
+    run: bun scripts/native-live-smoke.ts
+  - name: lock
+    run: bun install --lockfile-only
+  - name: install
+    run: bun install --frozen-lockfile
+  - name: css-build
+    needs: [install]
+    run: bun run --bun css:build
   - name: test
-    run: sh scripts/scala.sh test shared server
+    run: |
+      bun test scripts/native-steam.test.ts
+      sh scripts/scala.sh test shared server
   - name: server-build
     run: sh scripts/scala.sh compile shared server/project.scala server/src/main
   - name: client-build
     run: |
       mkdir -p dist/web
       sh scripts/scala.sh --power package shared client --js --js-module-kind esmodule -o dist/web/app.js --force
-      cp client/public/index.html client/public/style.css dist/web/
+      cp client/public/* dist/web/
   - name: build
-    needs: [test, server-build, client-build]
-    run: ':'
+    needs: [test, server-build, client-build, css-build]
+    run: bun scripts/version-assets.ts
   - name: native-build
     run: sh scripts/native-build.sh
   - name: wine-runtime
@@ -36,5 +65,5 @@ jobs:
       . ./config.env
       curl --fail --silent --show-error "http://$HTPC_HOST:$HTPC_PORT/api/v1/health"
   - name: run
-    needs: [client-build]
+    needs: [client-build, css-build]
     run: sh scripts/run.sh

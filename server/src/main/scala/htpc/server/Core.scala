@@ -24,7 +24,7 @@ object Fault:
   def timeout(ms: Int): IO[FiniteDuration] =
     require(ms >= 100 && ms <= 120000, "timeoutMs must be between 100 and 120000").as(ms.millis)
 
-final case class Config(host: String, port: Int, data: Path, web: Path, chromium: Option[String], wine: Option[String], wineServer: Option[String], dllHost: Path, swaySocket: Option[Path])
+final case class Config(host: String, port: Int, data: Path, web: Path, chromium: Option[String], wine: Option[String], wineServer: Option[String], dllHost: Path, swaySocket: Option[Path], hostServices: Option[Path] = None)
 object Config:
   def executable(name: String): Option[String] =
     if name.contains("/") then Option.when(Files.isExecutable(Paths.get(name)))(name)
@@ -35,7 +35,7 @@ object Config:
     def program(key: String, names: String*): Option[String] =
       sys.env.get(key).flatMap(executable).orElse(names.iterator.flatMap(executable).take(1).toList.headOption)
     Config(
-      sys.env.getOrElse("HTPC_HOST", "127.0.0.1"),
+      sys.env.getOrElse("HTPC_HOST", "0.0.0.0"),
       sys.env.getOrElse("HTPC_PORT", "8787").toInt,
       Paths.get(sys.env.getOrElse("HTPC_DATA", home.resolve(".local/share/htpc-next").toString)).toAbsolutePath,
       Paths.get(sys.env.getOrElse("HTPC_WEB", "dist/web")).toAbsolutePath,
@@ -43,7 +43,8 @@ object Config:
       program("HTPC_WINE", "wine", "wine64"),
       program("HTPC_WINESERVER", "wineserver"),
       Paths.get(sys.env.getOrElse("HTPC_DLL_HOST", "dist/native/dll-host.exe")).toAbsolutePath,
-      sys.env.get("SWAYSOCK").filter(_.nonEmpty).map(Paths.get(_))
+      sys.env.get("SWAYSOCK").filter(_.nonEmpty).map(Paths.get(_)),
+      Some(Paths.get(sys.env.getOrElse("HTPC_HOST_SERVICES", home.resolve(".config/htpc-next/host-services.json").toString)))
     )
 
 final class EventHub private(val epoch: String, counter: Ref[IO, Long], topic: FsTopic[IO, EventEnvelope], lock: Semaphore[IO]):

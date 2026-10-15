@@ -1,0 +1,259 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@source "../public/index.html";
+
+@theme {
+  --font-sans: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --color-canvas: #0d0f13;
+  --color-surface: #191c23;
+  --color-raised: #252932;
+  --color-ink: #f3f2ef;
+  --color-muted: #a8aebb;
+  --color-accent: #f1be83;
+}
+
+@layer base {
+  html { font-size: clamp(16px, .9375vw, 36px); color-scheme: dark; }
+  body { @apply m-0 bg-canvas font-sans text-ink antialiased; }
+  button, a, input { -webkit-tap-highlight-color: transparent; }
+  button, a { @apply cursor-pointer; }
+  button:disabled { @apply cursor-wait opacity-40; }
+  h1, h2, h3 { @apply font-semibold; }
+  button, input, textarea, select { font: inherit; }
+}
+
+@layer components {
+  .tv-shell { --tv-gutter: 4.7vw; @apply min-h-screen overflow-x-clip pb-24; }
+  .tv-shell [data-tv-focus] { scroll-margin: 7rem 1rem 6rem; transition: background .18s, color .18s, outline .12s, transform .18s; }
+  .tv-shell [data-tv-focus]:focus { outline: .18rem solid var(--color-accent); outline-offset: .28rem; }
+  .tv-shell [data-tv-focus]:active { transform: scale(.985); }
+  .tv-shell p { @apply leading-relaxed text-muted; }
+  .tv-icon { @apply inline-block size-6 shrink-0 bg-current align-middle; mask: var(--icon) center / contain no-repeat; }
+  .icon-play { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M7 4.8a1 1 0 0 1 1.5-.86l12 7.2a1 1 0 0 1 0 1.72l-12 7.2A1 1 0 0 1 7 19.2z'/%3E%3C/svg%3E"); }
+  .icon-search { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='m16 16 5 5'/%3E%3C/svg%3E"); }
+  .icon-arrow { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8'%3E%3Cpath d='M4 12h15m-6-6 6 6-6 6'/%3E%3C/svg%3E"); }
+  .icon-gamepad { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 7h10c3 0 4 4 4.5 8.5.4 3-1 4-3 2L16 15H8l-2.5 2.5c-2 2-3.4 1-3-2C3 11 4 7 7 7Z M7 9v5m-2.5-2.5h5M16 10h.01M18 12h.01'/%3E%3C/svg%3E"); }
+  .icon-grid { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.7'%3E%3Crect x='3' y='3' width='7' height='7' rx='1.5'/%3E%3Crect x='14' y='3' width='7' height='7' rx='1.5'/%3E%3Crect x='3' y='14' width='7' height='7' rx='1.5'/%3E%3Crect x='14' y='14' width='7' height='7' rx='1.5'/%3E%3C/svg%3E"); }
+  .icon-check { --icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Cpath d='m5 12 4 4L19 6'/%3E%3C/svg%3E"); }
+
+  .tv-topbar { @apply sticky top-0 z-40 flex h-24 items-center gap-14 border-b border-white/5 bg-canvas/95 backdrop-blur-xl; padding-inline: var(--tv-gutter); }
+  .tv-brand { @apply flex shrink-0 items-center gap-3 rounded-md text-xl font-semibold tracking-[.16em]; }
+  .tv-brand-symbol { @apply flex size-10 items-center justify-center rounded-xl bg-accent text-canvas; }
+  .tv-brand small { @apply ml-1 hidden text-[.65rem] font-normal tracking-[.18em] text-muted xl:inline; }
+  .tv-topbar nav { @apply flex h-full items-center gap-2; }
+  .tv-nav { @apply relative rounded-lg px-5 py-3 text-lg font-medium text-muted hover:bg-white/5 hover:text-ink; }
+  .tv-nav.active { @apply text-ink; }
+  .tv-nav.active::after { @apply absolute -bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded bg-accent; content: ""; }
+  .tv-topbar-right { @apply ml-auto flex items-center gap-6; }
+  .tv-topbar time { @apply pl-2 text-lg font-medium tabular-nums; }
+  .tv-round-button, .tv-avatar { @apply flex size-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5; }
+  .tv-avatar { @apply bg-accent/15 text-sm font-semibold text-accent; }
+  .tv-connection { @apply flex items-center gap-2 text-xs text-muted; }
+  .tv-connection-dot { @apply size-1.5 rounded-full bg-emerald-400; }
+
+  .tv-eyebrow { @apply mb-5 flex items-center gap-3 text-xs font-semibold tracking-[.2em] text-accent; }
+  .tv-eyebrow::before { @apply h-px w-6 bg-accent/70; content: ""; }
+  .tv-button { @apply inline-flex min-h-12 items-center justify-center gap-3 rounded-lg px-6 py-3 text-base font-semibold whitespace-nowrap; }
+  .tv-button.primary { @apply bg-ink text-canvas hover:bg-white; }
+  .tv-button.glass { @apply border border-white/15 bg-white/8 text-ink backdrop-blur-md hover:bg-white/15; }
+  .tv-button.subtle { @apply border border-white/10 bg-surface text-muted hover:bg-raised hover:text-ink; }
+  .tv-button.accent { @apply bg-accent text-canvas; }
+
+  .tv-hero { @apply relative isolate flex items-center; min-height: 25rem; }
+  .tv-hero-art, .tv-hero-shade { @apply absolute inset-0 -z-10; }
+  .tv-hero-art { background: url('/evening-lake.jpg') center 52% / cover; }
+  .tv-hero-shade { background: linear-gradient(90deg, #0d0f13f5 0%, #0d0f13c4 28%, #0d0f131a 70%), linear-gradient(0deg, #0d0f13, transparent 45%, #0d0f1333); }
+  .tv-hero-copy { @apply py-12; padding-inline: var(--tv-gutter); }
+  .tv-hero h1 { @apply mb-5 text-[3.4rem] leading-[1.18] font-semibold tracking-tight; }
+  .tv-hero h1 span { @apply text-accent; }
+  .tv-hero p { @apply max-w-md text-base text-white/70; }
+  .tv-hero-actions { @apply mt-8 flex flex-wrap items-center gap-4; }
+  .tv-hero-label { @apply absolute right-[var(--tv-gutter)] bottom-14 hidden items-center gap-3 text-xs tracking-widest text-white/75 lg:flex; }
+  .tv-hero-label small { @apply mt-1 block text-[.65rem] tracking-wider text-white/50; }
+  .tv-hero-label .tv-icon { @apply size-8; }
+  .tv-section-title { @apply flex items-center justify-between; }
+  .tv-section-title h2 { @apply text-lg font-medium; }
+  .tv-section-title small { @apply text-xs tracking-wider text-muted; }
+  .tv-apps { @apply relative -mt-1; padding-inline: var(--tv-gutter); }
+  .tv-app-track { @apply -mx-2 mt-3 flex gap-5 overflow-x-auto p-2 pb-4; scrollbar-width: none; }
+  .tv-app-tile { @apply relative flex h-24 min-w-60 flex-1 items-center gap-5 rounded-xl border border-white/10 bg-surface px-6 text-left hover:bg-raised; }
+  .tv-app-tile img { @apply size-11 shrink-0 object-contain; }
+  .tv-app-tile.youtube img { @apply w-24; }
+  .tv-app-tile .app-title { @apply block text-lg font-semibold; }
+  .tv-app-tile.youtube .app-title { @apply hidden; }
+  .tv-app-tile .app-caption { @apply mt-1 block whitespace-nowrap text-xs text-muted; }
+  .tv-app-tile .icon-arrow { @apply ml-auto size-5 text-muted; }
+  .tv-app-tile:focus { @apply bg-raised; transform: translateY(-.15rem); }
+
+  .tv-home-feeds { @apply pt-10; }
+  .tv-feed { @apply mb-10 min-h-40; }
+  .tv-feed-heading { @apply mb-3 flex items-end justify-between gap-4; padding-inline: var(--tv-gutter); }
+  .tv-feed-heading h2 { @apply text-xl font-semibold; }
+  .tv-feed-heading p { @apply mt-1.5 text-sm; }
+  .tv-feed-count { @apply text-xs text-muted tabular-nums; }
+  .tv-card-track { @apply flex items-stretch gap-5 overflow-x-auto py-3 pb-5; padding-inline: var(--tv-gutter); scroll-padding-inline: var(--tv-gutter); scrollbar-width: none; }
+  .tv-card-track::-webkit-scrollbar, .tv-app-track::-webkit-scrollbar { display: none; }
+  .tv-card { @apply flex shrink-0 flex-col rounded-xl bg-transparent p-0 text-left; width: clamp(15rem, 23vw, 23rem); flex-basis: clamp(15rem, 23vw, 23rem); }
+  .tv-card-art { @apply relative aspect-video w-full shrink-0 overflow-hidden rounded-xl border border-white/8 bg-surface; }
+  .tv-card-art img { @apply size-full object-cover; transition: transform .3s; }
+  .tv-card-art img.is-fallback { @apply object-contain p-8; }
+  .tv-card-art::after { @apply pointer-events-none absolute inset-0 rounded-xl ring-1 ring-inset ring-white/5; content: ""; }
+  .tv-card-badge { @apply absolute right-3 bottom-3 rounded-md bg-black/80 px-2 py-1 text-xs font-medium tabular-nums backdrop-blur-sm; }
+  .tv-card strong { @apply mt-3 block line-clamp-2 px-1 text-base leading-snug font-medium; }
+  .tv-card-subtitle { @apply mt-2 block w-full truncate px-1 text-sm text-muted; }
+  .tv-card:hover .tv-card-art img, .tv-card:focus .tv-card-art img { transform: scale(1.035); }
+  .tv-card:focus { transform: translateY(-.15rem); }
+  .tv-feed.poster .tv-card { width: clamp(10rem, 13.5vw, 14rem); flex-basis: clamp(10rem, 13.5vw, 14rem); }
+  .tv-feed.poster .tv-card-art { @apply aspect-[2/3]; }
+  .tv-feed.square .tv-card-art { @apply aspect-square; }
+  [data-feed-id="steam:connect"] .tv-card-art img { @apply object-contain p-8; }
+  .tv-more { @apply flex min-w-28 shrink-0 flex-col items-center justify-center gap-4 rounded-xl border border-white/10 bg-surface p-5 text-sm text-muted hover:bg-raised; }
+  .tv-feed-empty { @apply w-full rounded-xl border border-dashed border-white/15 bg-surface/60 px-8 py-10 text-base text-muted; }
+  .tv-feed-error { @apply flex items-center justify-between gap-5 rounded-xl border border-amber-200/15 bg-amber-200/5 px-6 py-5 text-sm text-amber-100; margin-inline: var(--tv-gutter); }
+  .tv-skeletons { @apply flex gap-5; }
+  .tv-skeleton { @apply aspect-video w-[23vw] min-w-60 rounded-xl bg-surface motion-safe:animate-pulse; }
+  .tv-loading-card { @apply flex items-center p-10 text-muted; }
+
+  .tv-control-bar { @apply fixed inset-x-0 bottom-0 z-40 flex min-h-16 items-center justify-between gap-5 border-t border-white/5 bg-canvas/95 py-4 text-xs text-muted backdrop-blur-xl; padding-inline: var(--tv-gutter); }
+  .tv-control-group { @apply flex items-center gap-6; }
+  .tv-control { @apply inline-flex items-center gap-2.5; }
+  .tv-keycap { @apply inline-flex size-6 items-center justify-center rounded-full border border-white/25 text-[.7rem] font-semibold text-ink; }
+  .tv-keycap.wide { @apply w-auto rounded-md px-2; }
+  .tv-control:first-child .tv-keycap { @apply border-accent/50 text-accent; }
+  .tv-gamepad-status { @apply inline-flex items-center gap-2 text-xs; }
+
+  .tv-simple-page { @apply py-16; padding-inline: var(--tv-gutter); }
+  .tv-simple-page h1 { @apply mb-5 text-4xl; }
+  .tv-simple-page p { @apply mb-8 text-lg; }
+  .tv-simple-page .tv-button { @apply mr-4; }
+  .tv-tool-symbol { @apply mb-8 flex size-20 items-center justify-center rounded-2xl border border-white/10 bg-surface text-accent; }
+  .tv-tool-symbol .tv-icon { @apply size-10; }
+
+  .yt-app-banner, .steam-banner { @apply flex items-center justify-between gap-12 border-b border-white/5 py-10; padding-inline: var(--tv-gutter); }
+  .yt-app-banner h1, .steam-banner h1 { @apply text-[2.5rem] leading-tight tracking-tight; }
+  .yt-app-banner p, .steam-banner p { @apply mt-4 text-base; }
+  .yt-wordmark { @apply mb-5 w-36; }
+  .yt-app-banner { background: radial-gradient(ellipse at 10% 0, #e94b3511, transparent 70%); }
+  .steam-banner { background: radial-gradient(ellipse at 15% 0, #7199c715, transparent 70%); }
+  .steam-brand { @apply size-14 shrink-0; }
+  .yt-account-status, .steam-account { @apply flex max-w-[40%] flex-col items-end gap-4 text-sm text-muted; }
+  .yt-signed-in { @apply text-emerald-300; }
+  .steam-account strong { @apply text-xl font-medium text-ink; }
+  .steam-account > span { @apply font-medium text-accent; }
+  .steam-actions { @apply flex gap-3; }
+  .steam-actions .tv-button { @apply px-4 text-sm; }
+  .yt-app-actions { @apply flex items-center gap-3 overflow-auto py-8; padding-inline: var(--tv-gutter); scrollbar-width: none; }
+  .yt-app-actions .tv-button:not(.primary) { @apply rounded-full px-5; }
+  .yt-account-footer { @apply flex items-center gap-5 pb-8 text-sm text-muted; padding-inline: var(--tv-gutter); }
+  .steam-page > .tv-feed, .steam-page > div:last-child { @apply pt-9; }
+  .steam-message { @apply my-6 text-sm text-accent; margin-inline: var(--tv-gutter); }
+  .steam-message:empty { @apply hidden; }
+
+  .yt-page-heading { @apply flex items-center justify-between gap-6 pt-10 pb-8; padding-inline: var(--tv-gutter); }
+  .yt-page-heading h1 { @apply text-[2.3rem] leading-tight tracking-tight; }
+  .yt-page-heading p { @apply mt-4 text-base; }
+  .yt-page-heading .tv-eyebrow { @apply mb-4; }
+  .yt-search-form { @apply mb-7 flex gap-4; margin-inline: var(--tv-gutter); max-width: 66rem; }
+  .yt-search-form input { @apply min-w-0 flex-1 rounded-xl border border-white/20 bg-surface px-6 py-4 text-lg outline-none placeholder:text-muted/70; }
+  .yt-search-hints { padding-inline: var(--tv-gutter); }
+  .yt-search-hints p { @apply mb-5; }
+  .yt-search-hints button { @apply mr-4 mb-4; }
+  .tv-screen-keyboard { @apply max-w-5xl pb-7; margin-inline: var(--tv-gutter); }
+  .tv-key-row { @apply mb-3 flex gap-3; }
+  .tv-key { @apply h-12 min-w-10 flex-1 rounded-lg border border-white/10 bg-surface text-xl; }
+  .tv-key:focus, .tv-key.primary { @apply bg-accent text-canvas; }
+  .tv-key-actions .tv-key { @apply text-sm; }
+
+  .yt-device-content { @apply mx-auto max-w-[80rem] pb-8; padding-inline: var(--tv-gutter); }
+  .yt-device-pairing { @apply flex items-center justify-center gap-16 rounded-2xl border border-white/10 bg-surface p-10; }
+  .yt-device-qr { @apply w-60 shrink-0 rounded-xl bg-white p-4; }
+  .yt-device-qr img { @apply block size-full; image-rendering: pixelated; }
+  .yt-device-steps { @apply max-w-xl; }
+  .yt-device-steps h2 { @apply mt-5 mb-2 text-xl font-semibold; }
+  .yt-device-steps h2:first-child { @apply mt-0; }
+  .yt-device-steps p { @apply my-2 text-base; }
+  .yt-device-url { @apply block break-all text-lg text-ink; }
+  .yt-device-code { @apply mt-4 block rounded-lg border border-white/10 bg-canvas/50 px-5 py-3 text-center font-mono text-[2.3rem] tracking-[.12em] whitespace-nowrap text-accent; }
+  .yt-device-expiry { @apply mt-5 block text-sm text-muted tabular-nums; }
+  .yt-device-status { @apply my-6 text-center text-base text-ink; }
+  .yt-device-actions { @apply flex justify-center gap-4; }
+  .yt-device-placeholder { @apply rounded-2xl border border-white/10 bg-surface p-10 text-center text-6xl text-accent; }
+  .yt-device-setup { @apply mt-6 rounded-xl border border-white/10 bg-surface p-6; }
+  .yt-device-setup h2 { @apply mb-3 text-lg; }
+  .yt-device-setup p { @apply mt-3 text-sm; }
+  .yt-device-hint { @apply mt-6 text-center text-sm; }
+
+  .steam-detail { @apply py-8; padding-inline: var(--tv-gutter); }
+  .steam-detail-body { @apply mt-8 flex items-center gap-14; }
+  .steam-detail-body > img { @apply w-64 rounded-xl border border-white/10 bg-surface; }
+  .steam-detail-body h1 { @apply mb-8 max-w-3xl text-4xl leading-tight; }
+  .steam-detail-body p { @apply my-5 text-lg; }
+  .steam-detail-body small { @apply mt-6 block text-sm text-muted; }
+  .steam-local-controls { @apply mt-7 max-w-3xl rounded-xl border border-white/10 bg-surface p-5; }
+  .steam-local-controls p { @apply my-3 text-base; }
+  .steam-local-controls .steam-actions { @apply flex-wrap; }
+  .steam-download { @apply my-4 flex flex-col gap-2 text-sm text-muted; }
+  .steam-download progress { @apply h-2 w-full overflow-hidden rounded-full; accent-color: var(--color-accent); }
+  .steam-install-config { @apply mb-5 flex flex-col gap-3; }
+  .yt-player-page { @apply py-6; padding-inline: var(--tv-gutter); }
+  .yt-player-heading { @apply mb-5 flex items-center gap-6; }
+  .yt-player-heading h1 { @apply line-clamp-2 text-lg font-medium; }
+  .yt-player-host { @apply mx-auto aspect-video overflow-hidden rounded-xl border border-white/10 bg-black; max-height: 65vh; }
+  .yt-player-host iframe { @apply size-full border-0; }
+  .yt-player-status { @apply my-4 text-center text-sm text-accent; }
+  .yt-player-status:empty { @apply hidden; }
+  .yt-player-controls { @apply mt-5 flex flex-wrap justify-center gap-4; }
+  .yt-playback-note { @apply mt-5 text-center text-xs; }
+}
+
+@media (max-width: 1100px) {
+  .tv-shell { --tv-gutter: 4vw; }
+  .tv-topbar { gap: 1.5rem; height: 5.5rem; }
+  .tv-topbar-right { gap: 1rem; }
+  .tv-connection { display: none; }
+  .tv-nav { padding-inline: 1rem; }
+  .tv-hero h1 { font-size: 3rem; }
+  .yt-device-pairing { gap: 2.5rem; padding: 2rem; }
+  .steam-actions { flex-wrap: wrap; justify-content: flex-end; }
+}
+@media (max-width: 700px) {
+  .tv-shell { --tv-gutter: 1.5rem; }
+  .tv-shell [data-tv-focus] { scroll-margin-top: 10rem; }
+  .tv-topbar { height: auto; min-height: 5rem; flex-wrap: wrap; gap: .75rem; padding-block: .75rem; }
+  .tv-brand { font-size: 1rem; }
+  .tv-topbar nav { order: 3; width: 100%; justify-content: center; }
+  .tv-topbar-right { gap: .75rem; }
+  .tv-topbar time, .tv-control-bar .tv-gamepad-status { display: none; }
+  .tv-nav { font-size: 1rem; padding: .5rem .75rem; white-space: nowrap; }
+  .tv-hero { min-height: 28rem; }
+  .tv-hero-copy { padding-block: 2rem; }
+  .tv-hero h1 { font-size: 2.6rem; }
+  .tv-hero-art { background-position: 65% center; }
+  .tv-hero-shade { background: linear-gradient(90deg, #0d0f13dd, #0d0f1388), linear-gradient(0deg,#0d0f13,transparent); }
+  .tv-app-tile { min-width: 17rem; }
+  .tv-control-bar { padding-inline: 1.5rem; }
+  .tv-control-group { gap: 1rem; }
+  .tv-control.hint-home { display: none; }
+  .tv-section-title small { display: none; }
+  .yt-app-banner, .steam-banner { flex-direction: column; align-items: flex-start; gap: 2rem; padding-block: 2rem; }
+  .yt-app-banner h1, .steam-banner h1 { font-size: 2rem; }
+  .yt-account-status, .steam-account { max-width: 100%; align-items: flex-start; }
+  .yt-page-heading { flex-wrap: wrap; padding-top: 2rem; }
+  .yt-page-heading h1 { font-size: 1.9rem; }
+  .yt-search-form { flex-wrap: wrap; gap: .75rem; }
+  .yt-search-form input { flex-basis: 100%; }
+  .tv-key-row { gap: .375rem; }
+  .tv-key { min-width: 0; font-size: 1rem; }
+  .tv-key-actions .tv-key { font-size: .75rem; white-space: nowrap; }
+  .yt-device-pairing { flex-direction: column; gap: 2rem; padding: 1.5rem; }
+  .yt-device-qr { width: 13rem; }
+  .yt-device-code { font-size: 1.75rem; }
+  .yt-device-actions, .yt-account-footer, .tv-feed-error { flex-wrap: wrap; }
+  .steam-detail-body { flex-direction: column; align-items: flex-start; gap: 2rem; }
+  .steam-detail-body > img { width: 12rem; }
+  .steam-detail-body h1 { font-size: 2rem; }
+  .yt-player-heading { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tv-shell *, .tv-shell *::before, .tv-shell *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
