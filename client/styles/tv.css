@@ -2,6 +2,13 @@
 @source "../src";
 @source "../public/index.html";
 
+.game-display-panel { margin-top: 1.5rem; }
+.game-display-options { margin-top: 1rem; padding: 1.25rem; border: 1px solid #ffffff20; border-radius: 1rem; }
+.game-display-options h3 { font-size: 1.35rem; margin-bottom: .5rem; }
+.game-display-options p { margin-bottom: .75rem; }
+.game-display-grid { display: grid; grid-template-columns: 1fr; gap: .75rem; margin: 1rem 0; }
+.game-display-grid .tv-button { justify-content: flex-start; white-space: normal; }
+
 @theme {
   --font-sans: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
   --color-canvas: #0d0f13;

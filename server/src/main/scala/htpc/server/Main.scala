@@ -16,7 +16,7 @@ import org.typelevel.ci.CIString
 import java.nio.file.Files
 import scala.concurrent.duration.*
 
-final class ServiceInterpreter(browser: Chromium, dll: Wine, display: Sway, events: EventHub, serverStorage: ServerStorage, local: HostServices) extends Interpreter[IO]:
+final class ServiceInterpreter(browser: Chromium, dll: Wine, display: Sway, events: EventHub, serverStorage: ServerStorage, local: HostServices, gameDisplay: GameDisplayService) extends Interpreter[IO]:
   def chromium[A](op: ChromiumOp[A]) = browser.handle(op)
   def wine[A](op: WineOp[A]) = dll.handle(op)
   def sway[A](op: SwayOp[A]) = display.handle(op)
@@ -25,6 +25,8 @@ final class ServiceInterpreter(browser: Chromium, dll: Wine, display: Sway, even
   def system[A](op: SystemOp[A]): IO[Either[SystemError, A]] = op match
     case SystemOp.GetCapabilities => IO.pure(Right(Capabilities(browser.capability, dll.capability, display.capability, events.epoch)))
     case SystemOp.QrCode(text) => QrCode.render(text)
+    case SystemOp.GameDisplayStatus => IO.pure(Right(gameDisplay.support))
+    case SystemOp.PrepareGameDisplay(application, settings) => gameDisplay.prepare(application, settings)
 
 final class Routes(config: Config, interpreter: Interpreter[IO], events: EventHub, browser: Chromium, dispatcher: Dispatcher[IO], local: HostServices):
   private def execute(id: String, packed: PackedRequest): IO[RpcResponse] =
@@ -91,7 +93,7 @@ object Main extends IOApp.Simple:
     storage <- Resource.eval(ServerStorage.create(config.data.resolve("storage")))
     _ <- Resource.make(sway.watch.start)(_.cancel)
     local = new HostServices(config.hostServices)
-    interpreter = new ServiceInterpreter(browser, wine, sway, events, storage, local)
+    interpreter = new ServiceInterpreter(browser, wine, sway, events, storage, local, new GameDisplayService(config, sway))
     routes = new Routes(config, interpreter, events, browser, dispatcher, local)
     server <- EmberServerBuilder.default[IO]
       .withHost(Host.fromString(config.host).getOrElse(throw IllegalArgumentException("Invalid HTPC_HOST")))

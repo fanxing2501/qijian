@@ -83,7 +83,8 @@ final class Sway(config: Config, events: EventHub):
         modes <- c.get[Vector[Json]]("modes").flatMap(_.traverse(Sway.parseMode))
       yield OutputInfo(name, active, c.get[Boolean]("power").orElse(c.get[Boolean]("dpms")).getOrElse(active), current, modes)
     })
-  yield DisplaySnapshot(session, Sway.windows(tree, session), workspaces, result) }
+    windows <- IO.blocking(Sway.windows(tree, session).map(w => w.copy(application = w.pid.flatMap(Sway.application))))
+  yield DisplaySnapshot(session, windows, workspaces, result) }
 
   private def command(value: String, window: Option[WindowRef] = None): IO[Done] = connection.use { (channel, session) => for
     _ <- window.traverse_ { w =>
@@ -138,6 +139,13 @@ final class Sway(config: Config, events: EventHub):
     else (watchOnce.attempt *> IO.sleep(3.seconds)).foreverM
 
 object Sway:
+  private[server] def application(pid: Long): Option[String] = scala.util.Try {
+    val in = Files.newInputStream(Path.of(s"/proc/$pid/environ"))
+    try new String(in.readNBytes(65536), UTF_8).split("\u0000").iterator
+      .find(_.startsWith("HTPC_APPLICATION=")).map(_.stripPrefix("HTPC_APPLICATION=")).filter(GameDisplay.validApplication)
+    finally in.close()
+  }.toOption.flatten
+
   private[server] def parseMode(j: Json): io.circe.Decoder.Result[OutputMode] = for
     w <- j.hcursor.get[Int]("width")
     h <- j.hcursor.get[Int]("height")

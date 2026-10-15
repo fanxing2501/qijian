@@ -12,6 +12,16 @@ object NativeSteamScripts:
       });
     }
     const q=window.__qijianNative;
+    // AppDetailsStore may retain unsubscribed/stale launch options. Subscribe to native data.
+    q.readLaunchOptions ||= id => new Promise((resolve,reject)=>{
+      let sub,finished=false;
+      const finish=(error,value)=>{if(finished)return;finished=true;clearTimeout(timer);sub?.unregister();error?reject(error):resolve(value)};
+      const timer=setTimeout(()=>finish(Error('读取 Steam 启动参数超时。')),5000);
+      try {
+        sub=SteamClient.Apps.RegisterForAppDetails(id,d=>{if(d?.unAppID===id)finish(null,String(d.strLaunchOptions||''))});
+        if(finished)sub.unregister();
+      }catch(e){finish(e)}
+    });
     q.downloads||={};
     if(q.launch&&!ids.includes(q.launch.appId))ids.push(q.launch.appId);
     const actions=loggedIn?await SteamClient.Apps.GetActiveGameActions():[];
@@ -67,7 +77,21 @@ object NativeSteamScripts:
     return {image:data,state:'ready'};
   }"""
 
-  val action = """async (op,id,folder,expectedAccount) => {
+  val launchOptions = """async (id,account) => {
+    if(!window.App?.BHasCurrentUser()||loginStore.accountName.toLowerCase()!==account.toLowerCase())throw Error('本机账号已变化。');
+    return await window.__qijianNative.readLaunchOptions(id);
+  }"""
+
+  val composeLaunch = """(original,prefix) => {
+    if(!prefix.length)return original;
+    if(original.includes('gamescope'))throw Error('已有自定义 Gamescope 启动参数，请先移除后使用画面设置。');
+    const command=prefix.map(a=>"'"+a.replace(/'/g,"'\"'\"'")+"'").join(' ')+' %command%';
+    const count=original.split('%command%').length-1;
+    if(count>1)throw Error('Steam 启动参数包含多个 %command%，无法自动配置。');
+    return count===1?original.replace('%command%',command):command+(original?' '+original:'');
+  }"""
+
+  val action = """async (op,id,folder,expectedAccount,launchChange=null) => {
     try {
       if(!window.App?.BHasCurrentUser())throw Error('请先扫码登录本机 Steam。');
       if(expectedAccount&&loginStore.accountName.toLowerCase()!==expectedAccount.toLowerCase())throw Error('本机 Steam 与当前游戏库账号不同，请先切换到同一账号。');
@@ -102,6 +126,13 @@ object NativeSteamScripts:
       }
       else if(op==='play'){
         if(!app.local_per_client_data?.installed||app.local_per_client_data.display_status!==11)throw Error('请先完成游戏安装和更新。');
+        if(launchChange){
+          const current=await window.__qijianNative.readLaunchOptions(id);
+          if(!window.App?.BHasCurrentUser()||loginStore.accountName.toLowerCase()!==expectedAccount.toLowerCase())throw Error('本机账号已变化。');
+          if(current!==launchChange.expected)throw Error('Steam 启动参数已变化，请重试。');
+          await SteamClient.Apps.SetAppLaunchOptions(id,launchChange.replacement);
+          if(await window.__qijianNative.readLaunchOptions(id)!==launchChange.replacement)throw Error('Steam 启动参数尚未生效，请重试。');
+        }
         window.__qijianNative.errors[id]='';
         window.__qijianNative.launch={appId:id,startedAt:Date.now(),seenRunning:false};
         SteamClient.Apps.RunGame(app.GetGameID(),'', -1,100);

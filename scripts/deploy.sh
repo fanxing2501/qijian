@@ -8,6 +8,8 @@ archive="$release/artifact.tar.gz"
 curl --fail --silent --show-error --location --retry 3 "$ARTIFACT_URL" -o "$archive"
 printf '%s  %s\n' "$ARTIFACT_SHA256" "$archive" | sha256sum -c -
 tar -xzf "$archive" -C "$release"
+mkdir -p "$HOME/.local/bin"
+ln -sfn "$release/bin/qijian-gamescope" "$HOME/.local/bin/qijian-gamescope"
 bun "$release/migrate-storage.ts"
 groot_path=$(command -v groot)
 unit="$HOME/.config/systemd/user/groot-htpc-next.service"
@@ -24,6 +26,7 @@ Environment=HTPC_HOST=$HTPC_HOST
 Environment=HTPC_PORT=$HTPC_PORT
 Environment=HTPC_WEB=$release/web
 Environment=HTPC_DLL_HOST=$release/native/dll-host.exe
+Environment=HTPC_GAMESCOPE_LAUNCHER=$release/bin/qijian-gamescope
 EnvironmentFile=-$HOME/.config/htpc-next/runtime.env
 EnvironmentFile=-$HOME/.config/htpc-next/desktop.env
 ExecStart=$groot_path use-jdk $JDK_MAJOR -- java -jar $release/htpc-next.jar

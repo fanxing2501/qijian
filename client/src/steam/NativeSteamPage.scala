@@ -125,5 +125,6 @@ object NativeSteamPage:
           onClick --> { _ => if confirmRemoval.now() then { confirmRemoval.set(false); act("uninstall") } else confirmRemoval.set(true) })),
       p(cls := "steam-message", child.text <-- error.signal),
       p(cls := "steam-message", child.text <-- native.displayProblem.signal.map(_.getOrElse(""))),
+      GameDisplayPanel.render(native.displayProfiles, s"steam-$id", context),
       p(cls := "steam-message", child.text <-- installation.map(_.fold("")(i =>
         if i.error.nonEmpty then i.error else if i.stage == 15 then "安装失败，请取消后重试。" else ""))))

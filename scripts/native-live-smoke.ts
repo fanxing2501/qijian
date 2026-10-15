@@ -6,6 +6,7 @@ import { openCdp } from './cdp-client';
 const base = process.env.HTPC_TEST_URL || 'http://127.0.0.1:8787';
 const appId = Number(process.env.HTPC_TEST_APP || '814380');
 const resume = process.env.HTPC_TEST_RESUME === '1';
+const isGame = (w: any) => w.appId === `steam_app_${appId}` || w.application === `steam-${appId}`;
 assert(Number.isSafeInteger(appId) && appId > 0);
 async function waitFor<T>(name: string, read: () => Promise<T | false>, timeout = 180000): Promise<T> {
   const end = Date.now() + timeout;
@@ -24,7 +25,7 @@ async function display() {
 const targets = await (await fetch('http://127.0.0.1:9228/json/list')).json();
 const kiosk = targets.find((t: any) => t.type === 'page' && t.url.startsWith(base));
 assert(kiosk, 'TV kiosk must be running');
-assert(resume || !(await display()).windows.some((w: any) => w.appId === `steam_app_${appId}`), 'Game must not already be running');
+assert(resume || !(await display()).windows.some(isGame), 'Game must not already be running');
 const ui = await openCdp(kiosk.webSocketDebuggerUrl);
 let launched = resume;
 async function click(key: string) {
@@ -40,10 +41,16 @@ try {
   }
   const running = await waitFor('fullscreen game on game workspace (first-run shader compilation may take several minutes)', async () => {
     const state = await display();
-    const game = state.windows.find((w: any) => w.appId === `steam_app_${appId}`);
+    const game = state.windows.find(isGame);
     return game?.focused && game.fullscreen && game.workspace === 'game' && state;
   }, 900000);
   assert(running.windows.filter((w: any) => w.appId?.toLowerCase() === 'steam').every((w: any) => w.workspace === '__background' && !w.focused));
+  if (process.env.HTPC_EXPECT_GAMESCOPE === '1') {
+    const outer = running.windows.find((w: any) => w.application === `steam-${appId}`); assert(outer, 'labelled outer Gamescope window');
+    const args = (await Bun.file(`/proc/${outer.pid}/cmdline`).text()).split('\0');
+    assert(args.includes('fsr') && args.includes('--mangoapp'), 'real Gamescope FSR and HUD arguments');
+    console.log('✓ Steam game runs inside its own labelled Gamescope instance with FSR and MangoApp');
+  }
   assert.equal(await ui.evaluate('document.hasFocus()'), false);
   console.log('✓ real game owns fullscreen/focus; Steam remains hidden; kiosk loses input focus');
   // Let startup movies/shader preparation finish before capturing the real compositor.
@@ -59,7 +66,7 @@ try {
   await waitFor('original Play focus after game exit', () => ui.evaluate(`document.hasFocus()&&document.activeElement?.getAttribute('data-tv-focus')==='steam:local-play'`));
   const home = await display(), shell = home.windows.find((w: any) => w.appId === 'htpc-next');
   assert(shell?.focused && shell.fullscreen && shell.workspace === 'home');
-  assert(!home.windows.some((w: any) => w.appId === `steam_app_${appId}`));
+  assert(!home.windows.some(isGame));
   launched = false;
   console.log('✓ game exited, home fullscreen restored, original Play control focused');
   const shot = await ui.call('Page.captureScreenshot');

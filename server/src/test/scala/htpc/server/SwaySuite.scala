@@ -111,12 +111,21 @@ class SwaySuite extends CatsEffectSuite:
         stale <- sway.handle(SwayOp.Focus(WindowRef("old-session", 42)))
         mode <- sway.handle(SwayOp.SetOutputMode("HDMI-A-1", OutputMode(1920, 1080, 59940)))
         unsupported <- sway.handle(SwayOp.SetOutputMode("HDMI-A-1", OutputMode(1, 1, 60)))
+        gameDisplay = new GameDisplayService(Config.load.copy(gamescope = Some("/bin/true"), gamescopeLauncher = Some(Path.of("/bin/true")), mangoapp = None), sway)
+        plan <- gameDisplay.prepare("local-game", GameDisplaySettings(enabled = true, width = 1280, height = 720, scaling = GameScaling.Fsr))
+        missingHud <- gameDisplay.prepare("local-game", GameDisplaySettings(enabled = true, hud = true))
+        invalidKey <- gameDisplay.prepare("invalid/key", GameDisplaySettings())
       yield {
         assertEquals(snapshot.outputs.head.currentMode, Some(OutputMode(1920, 1080, 59940)))
         assert(focused.isRight)
         assert(stale.left.exists(_.code == ErrorCode.Conflict))
         assert(mode.isRight)
         assert(unsupported.left.exists(_.code == ErrorCode.InvalidArgument))
+        assertEquals(plan.toOption.get.application, "local-game")
+        assertEquals(plan.toOption.get.output, OutputMode(1920, 1080, 59940))
+        assert(plan.toOption.get.prefix.contains("1280"))
+        assert(missingHud.left.exists(_.code == ErrorCode.Unavailable))
+        assert(invalidKey.left.exists(_.code == ErrorCode.InvalidArgument))
         assertEquals(commands.iterator().asScala.toVector, Vector("[con_id=42] focus", "output \"HDMI-A-1\" mode 1920x1080@59.94Hz"))
       }
       }

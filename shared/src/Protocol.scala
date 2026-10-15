@@ -116,6 +116,9 @@ sealed abstract class SystemOp[A: Codec](name: String) extends Request[SystemErr
   final def accept[F[_]](i: Interpreter[F]) = i.system(this)
 object SystemOp:
   case object GetCapabilities extends SystemOp[Capabilities]("capabilities")
+  case object GameDisplayStatus extends SystemOp[GameDisplaySupport]("game-display.status")
+  final case class PrepareGameDisplay(application: String, settings: GameDisplaySettings) extends SystemOp[GameDisplayLaunch]("game-display.prepare"):
+    override def args = Json.obj("application" -> application.asJson, "settings" -> settings.asJson)
   final case class QrCode(text: String) extends SystemOp[Screenshot]("qr"):
     override def args = Json.obj("text" -> text.asJson)
 
@@ -181,6 +184,8 @@ object Protocol:
       case (Module.Host, "cdp.targets") => field[String]("service").map(s => PackedRequest(HostOp.Targets(s)))
       case (Module.Host, "cdp.socket") => (for s <- field[String]("service"); t <- field[String]("target") yield PackedRequest(HostOp.Socket(s, t)))
       case (Module.System, "capabilities") => pure(SystemOp.GetCapabilities)
+      case (Module.System, "game-display.status") => pure(SystemOp.GameDisplayStatus)
+      case (Module.System, "game-display.prepare") => (for a <- field[String]("application"); s <- field[GameDisplaySettings]("settings") yield PackedRequest(SystemOp.PrepareGameDisplay(a, s)))
       case (Module.System, "qr") => field[String]("text").map(t => PackedRequest(SystemOp.QrCode(t)))
       case (Module.Storage, "get") => key.map(k => PackedRequest(StorageOp.Get(k)))
       case (Module.Storage, "inspect") => key.map(k => PackedRequest(StorageOp.Inspect(k)))

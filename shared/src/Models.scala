@@ -136,7 +136,7 @@ final case class DllInvocation(
 final case class ExecuteOptions(timeoutMs: Int = 15000) derives Codec.AsObject
 
 final case class WindowRef(session: String, container: Long) derives Codec.AsObject
-final case class WindowInfo(ref: WindowRef, title: String, appId: Option[String], workspace: String, focused: Boolean, fullscreen: Boolean, pid: Option[Long] = None) derives Codec.AsObject
+final case class WindowInfo(ref: WindowRef, title: String, appId: Option[String], workspace: String, focused: Boolean, fullscreen: Boolean, pid: Option[Long] = None, application: Option[String] = None) derives Codec.AsObject
 final case class OutputMode(width: Int, height: Int, refreshMilliHz: Int) derives Codec.AsObject
 final case class OutputInfo(name: String, active: Boolean, power: Boolean, currentMode: Option[OutputMode], modes: Vector[OutputMode]) derives Codec.AsObject
 final case class WorkspaceInfo(name: String, focused: Boolean, output: String) derives Codec.AsObject

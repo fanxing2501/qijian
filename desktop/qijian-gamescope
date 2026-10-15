@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+# Generic application identity survives exec and identifies the outer compositor window.
+application=${1:?Usage: qijian-gamescope application-key [gamescope options] -- program [arguments]}
+case "$application" in ''|*[!A-Za-z0-9_.-]*) echo 'Invalid application key' >&2; exit 2;; esac
+test "${#application}" -le 96
+shift
+export HTPC_APPLICATION="$application"
+# SDL's Wayland backend can leave nested Vulkan games invisible on this host.
+# Use Sway's XWayland for the outer window; game input and Steam's environment survive.
+export SDL_VIDEODRIVER="${HTPC_GAMESCOPE_SDL_DRIVER:-x11}"
+exec "${HTPC_GAMESCOPE:-gamescope}" "$@"

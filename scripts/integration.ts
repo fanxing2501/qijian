@@ -8,6 +8,7 @@ import { youtubeFixture } from "./youtube-fixture";
 import { accountFixture, auditCredentials } from "./account-fixture";
 import { infrastructureTest } from "./infrastructure-test";
 import { hostTest } from "./host-test";
+import { openCdp } from "./cdp-client";
 
 const root = process.cwd();
 const temporary = resolve(root, ".runtime", `integration-${crypto.randomUUID()}`);
@@ -94,6 +95,7 @@ const execute = (instance: string, name: string, input: unknown, timeoutMs = 150
   instance, invocation: { dll: resolve("dist/native/example-adapter.dll"), function: name, arguments: input, freeFunction }, options: { timeoutMs },
 });
 let passed = false;
+let uiControl: Awaited<ReturnType<typeof openCdp>> | undefined;
 try {
   await waitFor("HTTP startup", async () => (await fetch(`${base}/api/v1/health`)).ok);
   assert.equal((await fetch(base)).status, 200);
@@ -201,6 +203,13 @@ try {
 
   const ui = await rpc("chromium", "instance.new", options("UI verification"));
   const uiTab = (await rpc("chromium", "tab.new", { instance: ui.id })).ref;
+  // Physical controllers must not drive the headless fixture during a TV session.
+  const endpoint = await rpc('chromium', 'instance.socket', { instance: ui.id });
+  uiControl = await openCdp(base.replace(/^http/, 'ws') + endpoint.path);
+  const uiSession = (await uiControl.call('Target.attachToTarget', { targetId: uiTab.tab, flatten: true })).sessionId;
+  await uiControl.call('Page.addScriptToEvaluateOnNewDocument', {
+    source: "Object.defineProperty(navigator,'getGamepads',{value:()=>[],configurable:true})",
+  }, uiSession);
   await goto(uiTab, `${base}/console`);
   await waitFor("Laminar mount", async () => await jsValue(uiTab, "document.querySelector('h1')?.textContent === '本机能力工作台'"));
   await waitFor("Laminar typed client", async () => (await jsValue(uiTab, "document.querySelectorAll('.instance').length")) > 0);
@@ -391,6 +400,7 @@ try {
   assert.deepEqual(await rpc("wine", "instance.list"), []);
   passed = true;
 } finally {
+  uiControl?.close();
   try { process.kill(-service.pid, "SIGTERM"); } catch { service.kill(); }
   await Promise.race([service.exited, Bun.sleep(10000)]);
   if (service.exitCode === null) { try { process.kill(-service.pid, "SIGKILL"); } catch {} }

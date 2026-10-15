@@ -11,10 +11,13 @@ function fixture() {
   const overview = { update_appid: 814380, update_bytes_downloaded: 10, update_bytes_to_download: 100, update_network_bytes_per_second: 5 };
   const item = { appid: 814380, downloaded_bytes: 10, total_bytes: 100, active: true, completed: false, queue_index: 0 };
   const app = { local_per_client_data: local, selected_clientid: 'other-computer', GetGameID: () => '814380' };
+  const details = { strLaunchOptions: 'PROTON_LOG=1 %command% --custom' };
   const env: any = {
+    setTimeout, clearTimeout,
     loginStore: { loginState: 5, accountName: 'alice' },
     App: { m_CurrentUser: { strSteamID: 'account-id' }, BHasCurrentUser: () => true, GetServicesInitialized: () => true },
     appStore: { GetAppOverviewByAppID: () => app },
+    appDetailsStore: { RequestAppDetails: async () => details },
     downloadsStore: { LocalDownloadOverview: overview, GetDownloadItemForOverview(a: any) { expect(a.selected_clientid).toBe('local'); return item; } },
     SteamClient: {
       Downloads: {
@@ -25,6 +28,8 @@ function fixture() {
         RegisterForGameActionShowError: () => ({}), GetActiveGameActions: async () => [],
         CancelGameAction: (id: number) => calls.push(`cancel-launch:${id}`),
         RunGame: (...args: any[]) => calls.push(JSON.stringify(args)),
+        SetAppLaunchOptions: (id: number, options: string) => { calls.push('set-options'); details.strLaunchOptions = options; },
+        RegisterForAppDetails: (id: number, callback: (d: any) => void) => { callback({ unAppID: id, ...details }); return { unregister() {} }; },
         LoadEula: async () => [{ id: 'publisher', version: 2 }],
         MarkEulaAccepted: () => calls.push('accept'),
       },
@@ -39,7 +44,7 @@ function fixture() {
   };
   env.window = env;
   const invoke = (name: string, ...args: any[]) => runInNewContext(`(${scripts[name]})(...args)`, { ...env, args });
-  return { calls, install, local, item, env, invoke };
+  return { calls, install, local, item, details, env, invoke };
 }
 
 test('local downloads and running status use native client fields, with completed wizard cleared', async () => {
@@ -109,6 +114,28 @@ test('launch state is visible to the kiosk and survives frontend reconnection', 
   f.local.display_status = 4;
   const s = await f.invoke('snapshot', []);
   expect(s.games[0].appId).toBe(814380); expect(s.launch.seenRunning).toBe(true);
+});
+
+test('Gamescope launch options preserve custom flags, wrappers and shell argument boundaries', async () => {
+  const f = fixture(), prefix = ['/bin/sh', "/path with spaces/it's/qijian-gamescope", 'steam-814380', '--'];
+  const wrapped = await f.invoke('composeLaunch', 'PROTON_LOG=1 %command% --custom', prefix);
+  expect(wrapped).toStartWith('PROTON_LOG=1 '); expect(wrapped).toEndWith(' %command% --custom');
+  const p = Bun.spawn(['/bin/sh', '-c', 'printf "%s\\n" ' + wrapped.replace(/^PROTON_LOG=1 /, '')], { stdout: 'pipe' });
+  expect((await new Response(p.stdout).text()).trim().split('\n')).toEqual([...prefix, '%command%', '--custom']);
+  expect(await f.invoke('composeLaunch', '--custom', prefix)).toEndWith(' %command% --custom');
+  expect(await f.invoke('composeLaunch', 'PROTON_LOG=1 %command% --custom', [])).toBe('PROTON_LOG=1 %command% --custom');
+  expect(() => f.invoke('composeLaunch', 'gamescope -- %command%', prefix)).toThrow();
+  expect(() => f.invoke('composeLaunch', '%command% %command%', prefix)).toThrow();
+});
+
+test('Steam options are compared before change; a concurrent edit prevents launch', async () => {
+  const f = fixture(); await f.invoke('snapshot', []);
+  expect((await f.invoke('action', 'play', 814380, 0, 'alice', { expected: '', replacement: 'new' })).ok).toBe(false);
+  expect(f.calls).toHaveLength(0);
+  const change = { expected: f.details.strLaunchOptions, replacement: 'wrapped %command% --custom' };
+  expect((await f.invoke('action', 'play', 814380, 0, 'alice', change)).ok).toBe(true);
+  expect(f.calls).toEqual(['set-options', '["814380","",-1,100]']);
+  expect(f.details.strLaunchOptions).toBe(change.replacement);
 });
 
 test('shader preparation is visible and cancellation addresses only the selected launch', async () => {

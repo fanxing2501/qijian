@@ -93,7 +93,29 @@ This is developer configuration, not an end-user setup step. A missing client sh
 - Game cards show cover art, last-played date and total playtime. Selecting a card opens details and local install/download/play controls; returning restores the selected card across feed batches. The page also supports refresh, empty/error states, account switching and logout. Cached library data is invalidated when the account changes.
 - Steam's authentication endpoints are not a stable public third-party OAuth contract. Protocol references: [Steam authentication protobufs](https://github.com/SteamDatabase/Protobufs/blob/master/steam/steammessages_auth.steamclient.proto), [player service](https://github.com/SteamDatabase/Protobufs/blob/master/webui/service_player.proto), and [steam-session's WebBrowser renewal behavior](https://github.com/DoctorMcKay/node-steam-session#getwebcookies). WebBrowser authorization is separate from native-client authorization.
 
-#### Native client and desktop
+#### Per-application Gamescope profiles
+
+Game details include **画面设置**, navigable entirely with the controller. Enable Gamescope, choose native/720p/900p/1080p/1440p/4K render resolution, a frame cap, linear/FSR 1/integer scaling, FSR sharpness (0 sharpest–20 softest), and the MangoApp FPS/frame-time HUD. Save once; settings take effect on the next launch from 栖间. Output dimensions follow the active television output. The profile advertises the game's virtual display size; games with saved graphics settings may need the matching resolution and fullscreen mode selected in-game. FSR 1 is spatial upscaling, not frame generation; choose a render resolution lower than the output to reduce GPU work.
+
+Install `gamescope` and optional `mangoapp` through the host's package manager. `groot jobs deploy` ships the generic `qijian-gamescope` launcher through the verified S3 release and links it under `~/.local/bin`. The system API exposes `game-display.status` and `game-display.prepare` with typed `GameDisplaySettings`/`GameDisplayLaunch`; prepare returns an argv prefix, without launching a process. `GameDisplayProfiles` persists per-application profiles in typed serverStorage (`game-display/<application-key>`), using revision CAS. Apps append their own executable and arguments to the returned prefix.
+
+Steam's frontend adapter wraps the client's existing launch options, keeps an account-specific recovery record, rejects concurrent edits, and restores the original options on the next 栖间 launch with Gamescope disabled. Steam still owns Proton, cloud saves, Steam Input and process lifetime. The outer Gamescope window is identified by its process's `HTPC_APPLICATION` label in Sway snapshots, rather than a shared `gamescope` title. This works across frontend reconnections and keeps the existing fullscreen/return-to-home coordination.
+
+The launcher is also usable for non-Steam applications, for example:
+
+```sh
+qijian-gamescope local-game --backend sdl -f \
+  -w 1280 -h 720 -W 1920 -H 1080 -r 60 --framerate-limit 60 -F fsr \
+  -- /absolute/path/to/game
+```
+
+Profiles use the SDL nested backend over Sway's XWayland. Both the direct Wayland backend and SDL's Wayland driver left some applications invisible on this host; the SDL X11 driver was verified with Proton. Sway remains the physical compositor and continues to manage 栖间 and other applications. `HTPC_GAMESCOPE` and `HTPC_GAMESCOPE_LAUNCHER` can override the runtime paths; `HTPC_GAMESCOPE_SDL_DRIVER` overrides the launcher's default `x11` driver.
+
+`groot jobs gamescope-smoke` is an explicit physical-display acceptance job. It runs a non-Steam animated `ffplay` test pattern inside Gamescope, checks application/window identity, then operates the real game-detail controls to save and reload a 900p/30 FPS/FSR/HUD profile and runs the native launch/exit/focus smoke test. It requires the television to be available and leaves the tested profile saved. `HTPC_TEST_APP` selects an installed Steam game (default 814380); `HTPC_CAPTURE_TOOL` optionally supplies `grim` for compositor screenshots. The ordinary build/integration jobs never launch games on the TV.
+
+Native Wayland clients can opt into `--expose-wayland` (verified with `weston-simple-egl`), but this Gamescope/MangoApp combination had HUD compatibility problems with that mode. Managed profiles use XWayland for clients and the outer compositor window.
+
+#### Native client operation
 
 “本机下载与运行” opens the native client's QR in 栖间. The official client retains its own credentials in the HTPC user's Steam profile; only the QR image, public account identity and game state are returned over the generic CDP bridge. Expired/blurred placeholder QRs are withheld, and “刷新二维码” operates the native refresh control. The Steam homepage distinguishes library authorization from native-client login. No Big Picture interface is used. `NativeSteamScripts.scala` adapts the private `SteamClient` APIs, so Steam updates can require adapter changes.
 

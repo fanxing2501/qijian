@@ -24,7 +24,8 @@ object Fault:
   def timeout(ms: Int): IO[FiniteDuration] =
     require(ms >= 100 && ms <= 120000, "timeoutMs must be between 100 and 120000").as(ms.millis)
 
-final case class Config(host: String, port: Int, data: Path, web: Path, chromium: Option[String], wine: Option[String], wineServer: Option[String], dllHost: Path, swaySocket: Option[Path], hostServices: Option[Path] = None)
+final case class Config(host: String, port: Int, data: Path, web: Path, chromium: Option[String], wine: Option[String], wineServer: Option[String], dllHost: Path, swaySocket: Option[Path], hostServices: Option[Path] = None,
+  gamescope: Option[String] = None, mangoapp: Option[String] = None, gamescopeLauncher: Option[Path] = None)
 object Config:
   def executable(name: String): Option[String] =
     if name.contains("/") then Option.when(Files.isExecutable(Paths.get(name)))(name)
@@ -44,7 +45,9 @@ object Config:
       program("HTPC_WINESERVER", "wineserver"),
       Paths.get(sys.env.getOrElse("HTPC_DLL_HOST", "dist/native/dll-host.exe")).toAbsolutePath,
       sys.env.get("SWAYSOCK").filter(_.nonEmpty).map(Paths.get(_)),
-      Some(Paths.get(sys.env.getOrElse("HTPC_HOST_SERVICES", home.resolve(".config/htpc-next/host-services.json").toString)))
+      Some(Paths.get(sys.env.getOrElse("HTPC_HOST_SERVICES", home.resolve(".config/htpc-next/host-services.json").toString))),
+      program("HTPC_GAMESCOPE", "gamescope", "/usr/games/gamescope"), program("HTPC_MANGOAPP", "mangoapp"),
+      Some(Paths.get(sys.env.getOrElse("HTPC_GAMESCOPE_LAUNCHER", "desktop/qijian-gamescope")).toAbsolutePath)
     )
 
 final class EventHub private(val epoch: String, counter: Ref[IO, Long], topic: FsTopic[IO, EventEnvelope], lock: Semaphore[IO]):

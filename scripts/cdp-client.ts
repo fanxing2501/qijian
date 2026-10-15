@@ -10,9 +10,9 @@ export async function openCdp(url: string) {
   };
   socket.onclose = () => { for (const call of pending.values()) { clearTimeout(call.timer); call.reject(Error('CDP disconnected')); } pending.clear(); };
   await new Promise<void>((resolve, reject) => { socket.onopen = () => resolve(); socket.onerror = reject; });
-  const call = (method: string, params: any = {}): Promise<any> => new Promise((resolve, reject) => {
+  const call = (method: string, params: any = {}, sessionId?: string): Promise<any> => new Promise((resolve, reject) => {
     const id = ++sequence, timer = setTimeout(() => { pending.delete(id); reject(Error(method + ' timed out')); }, 20000);
-    pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params }));
+    pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params, sessionId }));
   });
   return { call, close: () => socket.close(), async evaluate(expression: string) {
     const result = await call('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, timeout: 15000 });

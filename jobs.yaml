@@ -20,6 +20,8 @@ jobs:
     run: sh scripts/steam-bootstrap.sh
   - name: desktop-smoke
     run: bun scripts/native-live-smoke.ts
+  - name: gamescope-smoke
+    run: bun scripts/gamescope-live-smoke.ts
   - name: lock
     run: bun install --lockfile-only
   - name: install

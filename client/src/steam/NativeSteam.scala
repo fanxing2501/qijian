@@ -2,7 +2,7 @@ package htpc.client.steam
 
 import com.raquo.laminar.api.L.*
 import htpc.client.ApiClient
-import htpc.client.infra.{DesktopRuntime, Rpc}
+import htpc.client.infra.{DesktopRuntime, Rpc, GameDisplayProfiles, ServerStorage, ServerKey}
 import htpc.client.tv.PageContext
 import htpc.protocol.*
 import io.circe.{Codec, Json}
@@ -23,9 +23,13 @@ final case class LocalLaunch(appId: Int, startedAt: Double, seenRunning: Boolean
 final case class LocalEula(id: String, version: Int, title: String, text: String) derives Codec.AsObject
 final case class LocalQr(image: Option[String], state: String) derives Codec.AsObject
 final case class LocalActionResult(ok: Boolean, error: String) derives Codec.AsObject
+final case class ManagedLaunchOptions(original: String, applied: String, previous: String) derives Codec.AsObject
+final case class LaunchOptionsChange(expected: String, replacement: String) derives Codec.AsObject
 
 final class NativeSteam(api: ApiClient):
   private val runtime = new DesktopRuntime(api, "steam")
+  val displayProfiles = new GameDisplayProfiles(api)
+  private val storage = new ServerStorage(api)
   val state = Var(Option.empty[LocalSteamState])
   val qrImage = Var(Option.empty[String])
   val qrState = Var("loading")
@@ -68,7 +72,7 @@ final class NativeSteam(api: ApiClient):
     gameActive.set(value.games.exists(_.running))
     if !displayController then Future.successful(()) else launched.fold(Future.successful(())) { id =>
     Rpc(api, SwayOp.Snapshot).flatMap { display =>
-      val window = display.windows.find(_.appId.exists(_.equalsIgnoreCase(s"steam_app_$id")))
+      val window = display.windows.find(w => matchesGame(w, id))
       val running = value.games.find(_.appId == id).exists(_.running)
       if previousWindow.isEmpty then previousWindow = display.windows.find(_.appId.contains("htpc-next")).map(_.ref)
       if running || window.nonEmpty then seenRunning = true
@@ -136,7 +140,8 @@ final class NativeSteam(api: ApiClient):
         previousWindow = s.windows.find(_.focused).filterNot(_.appId.exists(_.equalsIgnoreCase("steam"))).map(_.ref)
         context.foreach(_.focus.remember())
       } else Future.successful(())
-      r <- runtime.evaluate[LocalActionResult](t, s"(${NativeSteamScripts.action})(${op.asJson.noSpaces},$id,$folder,${expectedAccount.asJson.noSpaces})")
+      change <- if op == "play" then prepareLaunch(id, expectedAccount) else Future.successful(None)
+      r <- runtime.evaluate[LocalActionResult](t, s"(${NativeSteamScripts.action})(${op.asJson.noSpaces},$id,$folder,${expectedAccount.asJson.noSpaces},${change.asJson.noSpaces})")
       _ <- if r.ok then Future.successful(()) else Future.failed(RuntimeException(r.error))
     yield
       if op == "play" && displayController then { launched = Some(id); seenRunning = false; gameWindow = None; launchTime = scala.scalajs.js.Date.now() }
@@ -144,9 +149,32 @@ final class NativeSteam(api: ApiClient):
     action
 
   def returnToGame(id: Int): Future[Unit] = Rpc(api, SwayOp.Snapshot).flatMap { s =>
-    s.windows.find(_.appId.exists(_.equalsIgnoreCase(s"steam_app_$id")))
+    s.windows.find(w => matchesGame(w, id))
       .fold(Future.failed[Unit](RuntimeException("暂未找到游戏窗口。")))(w => Rpc(api, SwayOp.Focus(w.ref)).map(_ => ()))
   }
+
+  private def matchesGame(window: WindowInfo, id: Int): Boolean =
+    window.application.contains(s"steam-$id") || window.appId.exists(_.equalsIgnoreCase(s"steam_app_$id"))
+
+  private def prepareLaunch(id: Int, account: String): Future[Option[LaunchOptionsChange]] =
+    val steamId = state.now().filter(_.loggedIn).map(_.steamId).getOrElse("")
+    val key = ServerKey[ManagedLaunchOptions](StorageKey("steam", s"launch-$steamId-$id"))
+    for
+      profile <- displayProfiles.load(s"steam-$id").map(_._1)
+      record <- storage.get(key)
+      result <- if !profile.enabled && record._1.isEmpty then Future.successful(None) else for
+        current <- evaluate[String](s"(${NativeSteamScripts.launchOptions})($id,${account.asJson.noSpaces})")
+        original <- Future.fromTry(scala.util.Try {
+          record._1.filter(r => r.applied == current || r.previous == current).map(_.original).getOrElse {
+            if current.contains("qijian-gamescope") then throw RuntimeException("栖间管理的 Steam 启动参数已被修改，请先恢复原参数。")
+            current
+          }
+        })
+        plan <- if profile.enabled then displayProfiles.prepare(s"steam-$id", profile).map(p => p.prefix) else Future.successful(Vector.empty)
+        desired <- evaluate[String](s"(${NativeSteamScripts.composeLaunch})(${original.asJson.noSpaces},${plan.asJson.noSpaces})")
+        _ <- if desired == current then Future.successful(()) else storage.put(key, ManagedLaunchOptions(original, desired, current), Some(record._2)).map(_ => ())
+      yield Some(LaunchOptionsChange(current, desired))
+    yield result
 
 object NativeSteam:
   def size(bytes: Double): String = if bytes >= 1024 * 1024 * 1024 then f"${bytes / (1024 * 1024 * 1024)}%.1f GB" else f"${bytes / (1024 * 1024)}%.1f MB"
