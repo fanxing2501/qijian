@@ -53,6 +53,8 @@ try {
     console.log('✓ Steam game runs inside its own labelled Gamescope instance with FSR and MangoApp');
   }
   assert.equal(await ui.evaluate('document.hasFocus()'), false);
+  assert(running.windows.some((w: any) => w.appId === 'htpc-next' && w.fullscreen && w.workspace === 'home'), 'kiosk must stay fullscreen while the game runs');
+  assert.equal((await ui.call('Browser.getWindowForTarget', { targetId: kiosk.id })).bounds.windowState, 'fullscreen');
   console.log('✓ real game owns fullscreen/focus; Steam remains hidden; kiosk loses input focus');
   // Let startup movies/shader preparation finish before capturing the real compositor.
   await Bun.sleep(45000);
@@ -67,6 +69,8 @@ try {
   await waitFor('original Play focus after game exit', () => ui.evaluate(`document.hasFocus()&&document.activeElement?.getAttribute('data-tv-focus')==='steam:local-play'`));
   const home = await display(), shell = home.windows.find((w: any) => w.appId === 'htpc-next');
   assert(shell?.focused && shell.fullscreen && shell.workspace === 'home');
+  assert.equal((await ui.call('Browser.getWindowForTarget', { targetId: kiosk.id })).bounds.windowState, 'fullscreen');
+  assert(await ui.evaluate('innerHeight===screen.height&&innerWidth===screen.width'), 'browser chrome must stay hidden after game exit');
   assert(!home.windows.some(isGame));
   launched = false;
   console.log('✓ game exited, home fullscreen restored, original Play control focused');

@@ -151,6 +151,20 @@ Game details offer disk selection, download/pause/resume, license text with cont
 
 `groot jobs desktop-deploy` packages the `desktop/` scripts/configuration through S3 and installs `groot-htpc-desktop.service`, `groot-htpc-steam.service` and `groot-htpc-kiosk.service`. Sway owns the physical DRM output through the system's existing seatd service. `HTPC_DRM_DEVICE` in `config.env` identifies the stable GPU PCI symlink, resolved before passing it to wlroots. On this host, deployment stops/disables the superseded `groot-hearth-display.service` and `groot-hearth-compositor.service`; other Hearth services remain independent. Startup readiness publishes `desktop.env` before dependent programs start. Server Chromium and the kiosk use separate processes/profiles.
 
+Sway `assign` rules place kiosk, native Steam games, Gamescope and Steam management windows into their destination workspaces **before mapping**. A fullscreen Gamescope window initially mapped on `home` would cancel the kiosk's compositor fullscreen (and expose Chromium's browser bars); moving it later from frontend polling or `for_window` is too late. Late class changes still have `for_window` rules. `groot jobs fullscreen-smoke` launches disposable real Gamescope/SDL windows, including a hidden Steam-management fixture, and asserts kiosk fullscreen and the browser viewport throughout creation, switching home while a game is alive, and exit. Run this physical-display check when the TV is idle.
+
+#### HTPC-only audio
+
+The desktop release also installs `groot-htpc-audio.service`: a PipeWire loopback sink named `qijian.audio` / **栖间 HTPC**. The kiosk and background Steam launchers set `PULSE_SINK=qijian.audio`; Proton and other PulseAudio clients launched by Steam inherit that route. The bus feeds the output recorded in `~/.config/htpc-next/audio.json`, initially the existing default speaker, without changing the system default or its master volume. The virtual sink has low selection priority and its output has fallback disabled to avoid self-routing. First setup uses a private volume of **30%**; subsequent launches preserve the configured value. Other applications, Windows USB audio and Jarvis retain their existing routes and levels.
+
+```sh
+groot jobs audio-status
+HTPC_VOLUME=30 groot jobs audio-volume  # only the HTPC bus; 0–100
+groot jobs audio-smoke                 # silent kiosk/PulseAudio routing and isolation checks
+```
+
+HTPC volume shortcuts must target this bus, **not** `@DEFAULT_AUDIO_SINK@`. Applications explicitly selecting ALSA or a different output need their own route configuration. `audio-smoke` verifies actual kiosk and PulseAudio links and checks that the physical device's level, default sink and existing Windows USB playback levels remain unchanged.
+
 Prerequisites on Ubuntu are `steam-installer`, i386 Mesa/Vulkan libraries, `sway`, `xwayland` and a usable seatd seat. The bootstrap job verifies Ubuntu's pinned Steam archive; the official client subsequently updates itself. User lingering is required for unattended startup. This host's Mi TV runs at 1920×1080/60 Hz. Physical controller acceptance requires a connected controller; the ordinary integration suite does not download paid games.
 
 For unattended seatd sessions, `steam-devices`' logind `uaccess` tags alone do not grant device access. Run `groot jobs desktop-input-prepare`, then the printed `sudo` command once to install the S3-delivered `71-qijian-gamepad.rules`. It grants the existing `plugdev` group read/write access to joystick input devices and Steam Input's `/dev/uinput`; the TV user must belong to that group. Reconnect the controller after installation. Browser navigation may work through `/dev/input/js*` even when Steam/Proton cannot open `/dev/input/event*`, so verify native Steam detection as well as the browser Gamepad API.

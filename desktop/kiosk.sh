@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+export PULSE_SINK=qijian.audio
 profile="$HOME/snap/chromium/common/htpc-next-kiosk"
 mkdir -p "$profile"
 exec /snap/bin/chromium --ozone-platform=wayland --class=htpc-next \

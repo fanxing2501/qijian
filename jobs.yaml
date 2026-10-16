@@ -20,6 +20,16 @@ jobs:
     run: sh scripts/steam-bootstrap.sh
   - name: desktop-smoke
     run: bun scripts/native-live-smoke.ts
+  - name: fullscreen-smoke
+    run: |
+      mkdir -p artifacts
+      bun scripts/fullscreen-live-smoke.ts
+  - name: audio-smoke
+    run: bun scripts/audio-live-smoke.ts
+  - name: audio-status
+    run: bun desktop/audio.ts status
+  - name: audio-volume
+    run: bun desktop/audio.ts set-volume "${HTPC_VOLUME:?Set HTPC_VOLUME to 0–100}"
   - name: gamescope-smoke
     run: bun scripts/gamescope-live-smoke.ts
   - name: lock
